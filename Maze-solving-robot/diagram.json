@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "author": "Group 4",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-arduino-mega", "id": "mega", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-led", "id": "led1", "top": -90, "left": 128.6, "attrs": { "color": "red" } }
+  ],
+  "connections": [
+    [ "led1:C", "mega:GND.1", "black", [ "v19.2", "h-76.4" ] ],
+    [ "led1:A", "mega:8", "red", [ "v19.2", "h19.2" ] ]
+  ],
+  "dependencies": {}
+}
