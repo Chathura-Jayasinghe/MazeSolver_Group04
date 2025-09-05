@@ -3,12 +3,17 @@
   "author": "Group 4",
   "editor": "wokwi",
   "parts": [
-    { "type": "wokwi-arduino-mega", "id": "mega", "top": 0, "left": 0, "attrs": {} },
-    { "type": "wokwi-led", "id": "led1", "top": -90, "left": 128.6, "attrs": { "color": "red" } }
+    { "type": "wokwi-arduino-mega", "id": "mega", "top": 87, "left": 82.8, "attrs": {} },
+    { "type": "wokwi-led", "id": "led1", "top": 15.6, "left": 205.4, "attrs": { "color": "red" } },
+    { "type": "wokwi-hc-sr04", "id": "ultrasonic1", "top": -113.7, "left": 139.9, "attrs": {} }
   ],
   "connections": [
     [ "led1:C", "mega:GND.1", "black", [ "v19.2", "h-76.4" ] ],
-    [ "led1:A", "mega:8", "red", [ "v19.2", "h19.2" ] ]
+    [ "led1:A", "mega:8", "red", [ "v19.2", "h19.2" ] ],
+    [ "ultrasonic1:GND", "mega:GND.1", "black", [ "v19.2", "h-164.4", "v96" ] ],
+    [ "ultrasonic1:TRIG", "mega:2", "green", [ "v28.8", "h47.6" ] ],
+    [ "ultrasonic1:ECHO", "mega:3", "green", [ "v19.2", "h95.2" ] ],
+    [ "mega:5V", "ultrasonic1:VCC", "red", [ "v-50.7", "h-64.9" ] ]
   ],
   "dependencies": {}
 }

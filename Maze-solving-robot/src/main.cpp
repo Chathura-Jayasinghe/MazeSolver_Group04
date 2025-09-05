@@ -1,18 +1,32 @@
 #include <Arduino.h>
 
-// put function declarations here:
-int myFunction(int, int);
+//Ultrasonic Sensor Pins
+int TRIG_PIN_REAL = 2;  
+int ECHO_PIN_REAL = 3;
+
+float UltrasonicDistance(int TRIG_PIN, int ECHO_PIN);
+
 
 void setup() {
-  // put your setup code here, to run once:
-  int result = myFunction(2, 3);
+    pinMode(TRIG_PIN_REAL, OUTPUT);
+    pinMode(ECHO_PIN_REAL, INPUT);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+
+ 
 }
 
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+// Function to measure distance using an ultrasonic sensor
+float UltrasonicDistance(int TRIG_PIN, int ECHO_PIN) {
+
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+    
+    long duration = pulseIn(ECHO_PIN, HIGH);
+    float distance = duration * 0.034 / 2;
+    return distance;
 }
