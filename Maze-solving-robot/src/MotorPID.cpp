@@ -6,7 +6,7 @@ MotorPID *MotorPID::motorInstances[2] = {nullptr, nullptr};
 // Constructor
 MotorPID::MotorPID(int in1, int in2, int encA, int encB, bool inverted)
     : in1Pin(in1), in2Pin(in2), encAPin(encA), encBPin(encB), inverted(inverted),
-      encoderCount(0), Kp(2.0), Ki(0.1), Kd(0.2),
+      encoderCount(0), Kp(0.2), Ki(0.01), Kd(0.02), // Further reduced Kp, Ki, Kd values
       integral(0), lastError(0), lastTime(0) {}
 
 void MotorPID::begin()
@@ -53,6 +53,9 @@ void MotorPID::encoderISR()
         encoderCount += inverted ? 1 : -1;
 }
 
+// Introduced a scaling factor to limit the maximum PWM output
+const float PWM_SCALING_FACTOR = 0.5; // Scale down to 50% of the maximum speed
+
 void MotorPID::updatePID(long targetPos)
 {
     unsigned long now = millis();
@@ -75,6 +78,9 @@ void MotorPID::updatePID(long targetPos)
     float deriv = (error - lastError) / dt;
     float out = Kp * error + Ki * integral + Kd * deriv;
     out = constrain(out, -255, 255);
+
+    // Apply scaling factor to reduce speed
+    out *= PWM_SCALING_FACTOR;
 
     // Apply output to motor pins
     if (out > 0)

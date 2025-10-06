@@ -1,13 +1,13 @@
 #include <Arduino.h>
 #include "MotorPID.h"
 
-#define REV_COUNT 20
+#define REV_COUNT 10
 #define PPR 11
 #define GEAR_RATIO 21
 #define PULSES_PER_REV (PPR * GEAR_RATIO)
 
-MotorPID leftMotor(8, 9, 3, 7, false); // IN1, IN2, ENCA, ENCB, inverted?
-MotorPID rightMotor(5, 6, 2, 4, true); // IN1, IN2, ENCA, ENCB, inverted
+MotorPID leftMotor(8, 9, 3, 7, true); // IN1, IN2, ENCA, ENCB, inverted?
+MotorPID rightMotor(5, 6, 2, 4, false); // IN1, IN2, ENCA, ENCB, inverted
 
 long targetLeft = REV_COUNT * PULSES_PER_REV;
 long targetRight = REV_COUNT * PULSES_PER_REV;
