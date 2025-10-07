@@ -1,126 +1,146 @@
+/*
+  MotorPID.cpp - Motor control with encoder feedback
+  Implementation file
+*/
+
 #include "MotorPID.h"
 
-// Initialize static pointer array
-MotorPID *MotorPID::motorInstances[2] = {nullptr, nullptr};
+MotorPID* MotorPID::_instance1 = nullptr;
+MotorPID* MotorPID::_instance2 = nullptr;
 
 // Constructor
-MotorPID::MotorPID(int in1, int in2, int encA, int encB, bool inverted)
-    : in1Pin(in1), in2Pin(in2), encAPin(encA), encBPin(encB), inverted(inverted),
-      encoderCount(0), Kp(0.2), Ki(0.01), Kd(0.02), // Further reduced Kp, Ki, Kd values
-      integral(0), lastError(0), lastTime(0) {}
-
-void MotorPID::begin()
-{
-    pinMode(in1Pin, OUTPUT);
-    pinMode(in2Pin, OUTPUT);
-    pinMode(encAPin, INPUT_PULLUP);
-    pinMode(encBPin, INPUT_PULLUP);
+MotorPID::MotorPID(int in1Pin, int in2Pin, int encoderAPin, int encoderBPin, bool reversed) {
+  _in1Pin = in1Pin;
+  _in2Pin = in2Pin;
+  _encoderAPin = encoderAPin;
+  _encoderBPin = encoderBPin;
+  _reversed = reversed;
+  
+  _speed = 0;
+  _forward = true;
+  _encoderCount = 0;
+  
+  // Assign instance number for ISR routing
+  if (_instance1 == nullptr) {
+    _instance1 = this;
+    _instanceNum = 1;
+  } else if (_instance2 == nullptr) {
+    _instance2 = this;
+    _instanceNum = 2;
+  }
 }
 
-void MotorPID::attachEncoderISR()
-{
-    // You can assign instances manually if needed
-    if (encAPin == 2)
-    {
-        motorInstances[0] = this;
-        attachInterrupt(digitalPinToInterrupt(encAPin), handleEncoderA0, RISING);
+// Initialize motor and encoder
+void MotorPID::begin() {
+  pinMode(_in1Pin, OUTPUT);
+  pinMode(_in2Pin, OUTPUT);
+  
+  pinMode(_encoderAPin, INPUT_PULLUP);
+  pinMode(_encoderBPin, INPUT_PULLUP);
+  
+  if (_instanceNum == 1) {
+    attachInterrupt(digitalPinToInterrupt(_encoderAPin), _encoderISR_A, CHANGE);
+  } else if (_instanceNum == 2) {
+    attachInterrupt(digitalPinToInterrupt(_encoderAPin), _encoderISR_B, CHANGE);
+  }
+  
+  stop();
+}
+
+// Set motor direction
+void MotorPID::setDirection(bool forward) {
+  _forward = forward;
+  _applyMotorControl();
+}
+
+// Set motor speed (0-255)
+void MotorPID::setSpeed(int speed) {
+  // Constrain speed to valid range
+  _speed = constrain(speed, 0, 255);
+  _applyMotorControl();
+}
+
+// Stop the motor
+void MotorPID::stop() {
+  _speed = 0;
+  digitalWrite(_in1Pin, LOW);
+  digitalWrite(_in2Pin, LOW);
+}
+
+// Update motor (call in loop)
+void MotorPID::update() {
+  // This function can be used for PID control in future
+  // For now, it just maintains current speed/direction
+  _applyMotorControl();
+}
+
+// Get encoder count
+long MotorPID::getEncoderCount() {
+  return _encoderCount;
+}
+
+// Reset encoder count
+void MotorPID::resetEncoder() {
+  noInterrupts();
+  _encoderCount = 0;
+  interrupts();
+}
+
+// Get current speed
+int MotorPID::getSpeed() {
+  return _speed;
+}
+
+// Get current direction
+bool MotorPID::getDirection() {
+  return _forward;
+}
+
+// Apply motor control based on speed and direction
+void MotorPID::_applyMotorControl() {
+  bool actualForward = _reversed ? !_forward : _forward;
+  
+  if (_speed == 0) {
+    // Stop motor
+    digitalWrite(_in1Pin, LOW);
+    digitalWrite(_in2Pin, LOW);
+  } else {
+    if (actualForward) {
+      // Forward direction
+      analogWrite(_in1Pin, _speed);
+      digitalWrite(_in2Pin, LOW);
+    } else {
+      // Backward direction
+      digitalWrite(_in1Pin, LOW);
+      analogWrite(_in2Pin, _speed);
     }
-    else if (encAPin == 3)
-    {
-        motorInstances[1] = this;
-        attachInterrupt(digitalPinToInterrupt(encAPin), handleEncoderA1, RISING);
-    }
+  }
 }
 
-// Static ISR wrappers
-void MotorPID::handleEncoderA0()
-{
-    if (motorInstances[0])
-        motorInstances[0]->encoderISR();
-}
-void MotorPID::handleEncoderA1()
-{
-    if (motorInstances[1])
-        motorInstances[1]->encoderISR();
-}
-
-void MotorPID::encoderISR()
-{
-    // Direction based on B phase
-    if (digitalRead(encBPin) == HIGH)
-        encoderCount += inverted ? -1 : 1;
-    else
-        encoderCount += inverted ? 1 : -1;
+// Handle encoder pulse
+void MotorPID::_handleEncoder() {
+  // Read both encoder pins
+  int a = digitalRead(_encoderAPin);
+  int b = digitalRead(_encoderBPin);
+  
+  // Determine direction and increment/decrement count
+  if (a == b) {
+    _encoderCount++;
+  } else {
+    _encoderCount--;
+  }
 }
 
-// Introduced a scaling factor to limit the maximum PWM output
-const float PWM_SCALING_FACTOR = 0.5; // Scale down to 50% of the maximum speed
-
-void MotorPID::updatePID(long targetPos)
-{
-    unsigned long now = millis();
-    float dt = (now - lastTime) / 1000.0f;
-    if (dt < 0.01f)
-        return;
-
-    float error = (float)(targetPos - encoderCount);
-    if (fabs(error) < 5)
-    {
-        stop();
-        integral = 0;
-        lastError = 0;
-        lastTime = now;
-        return;
-    }
-
-    integral += error * dt;
-    integral = constrain(integral, -1000, 1000);
-    float deriv = (error - lastError) / dt;
-    float out = Kp * error + Ki * integral + Kd * deriv;
-    out = constrain(out, -255, 255);
-
-    // Apply scaling factor to reduce speed
-    out *= PWM_SCALING_FACTOR;
-
-    // Apply output to motor pins
-    if (out > 0)
-    {
-        if (inverted)
-        {
-            analogWrite(in1Pin, 0);
-            analogWrite(in2Pin, abs(out));
-        }
-        else
-        {
-            analogWrite(in1Pin, abs(out));
-            analogWrite(in2Pin, 0);
-        }
-    }
-    else
-    {
-        if (inverted)
-        {
-            analogWrite(in1Pin, abs(out));
-            analogWrite(in2Pin, 0);
-        }
-        else
-        {
-            analogWrite(in1Pin, 0);
-            analogWrite(in2Pin, abs(out));
-        }
-    }
-
-    lastError = error;
-    lastTime = now;
+// Static ISR for motor 1 (encoder A pin)
+void MotorPID::_encoderISR_A() {
+  if (_instance1 != nullptr) {
+    _instance1->_handleEncoder();
+  }
 }
 
-void MotorPID::stop()
-{
-    analogWrite(in1Pin, 0);
-    analogWrite(in2Pin, 0);
-}
-
-long MotorPID::getCount()
-{
-    return encoderCount;
+// Static ISR for motor 2 (encoder A pin)
+void MotorPID::_encoderISR_B() {
+  if (_instance2 != nullptr) {
+    _instance2->_handleEncoder();
+  }
 }
