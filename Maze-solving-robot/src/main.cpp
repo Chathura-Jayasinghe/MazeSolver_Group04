@@ -28,7 +28,7 @@
 
 // Control parameters
 #define OBSTACLE_DISTANCE 8
-#define BASE_SPEED 50
+#define BASE_SPEED 100
 #define MAX_CORRECTION 40
 #define ALIGNMENT_THRESHOLD 1.0
 #define CORRECTION_GAIN 2.0
@@ -44,7 +44,8 @@
 #define TURN_90_MS        400
 #define UTURN_MS          1000
 #define BRAKE_MS          500
-#define POST_TURN_FWD_MS  900
+#define POST_TURN_FWD_MS  700
+#define PRE_TURN_FWD_MS   1050
 
 #define COUNTS_PER_360  444L               // Adjust based on your robot's turning characteristics
 #define COUNTS_PER_90   230
@@ -331,11 +332,10 @@ void rotateUTurn() {
 }
 
 void executeDecision(Decision d) {
-    // Serial.print("******Executing decision: ****");
     switch (d) {
-        case DEC_LEFT:     forwardForMs(BASE_SPEED, 1100); rotateLeft90();     forwardForMs(BASE_SPEED, POST_TURN_FWD_MS); break;
+        case DEC_LEFT:     forwardForMs(50, PRE_TURN_FWD_MS); rotateLeft90();     forwardForMs(BASE_SPEED, POST_TURN_FWD_MS); break;
         case DEC_STRAIGHT: forwardForMs(BASE_SPEED, POST_TURN_FWD_MS);                     break;
-        case DEC_RIGHT:    forwardForMs(BASE_SPEED, 1100); rotateRight90();    forwardForMs(BASE_SPEED, POST_TURN_FWD_MS); break;
+        case DEC_RIGHT:    forwardForMs(50, PRE_TURN_FWD_MS); rotateRight90();    forwardForMs(BASE_SPEED, POST_TURN_FWD_MS); break;
         case DEC_UTURN:    rotateUTurn();      forwardForMs(BASE_SPEED, POST_TURN_FWD_MS); break;
         default:           break;
     }
