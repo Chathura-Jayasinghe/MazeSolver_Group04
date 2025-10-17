@@ -44,10 +44,10 @@
 #define TURN_90_MS        400
 #define UTURN_MS          1000
 #define BRAKE_MS          500
-#define POST_TURN_FWD_MS  1000
+#define POST_TURN_FWD_MS  900
 
 #define COUNTS_PER_360  444L               // Adjust based on your robot's turning characteristics
-#define COUNTS_PER_90   (COUNTS_PER_360 / 2)
+#define COUNTS_PER_90   230
 
 #define TURN_PWM_FAST    110               // main spin speed
 #define TURN_PWM_SLOW    80                // used to let the lagging side catch up
@@ -333,9 +333,9 @@ void rotateUTurn() {
 void executeDecision(Decision d) {
     // Serial.print("******Executing decision: ****");
     switch (d) {
-        case DEC_LEFT:     forwardForMs(BASE_SPEED, 1500); rotateLeft90();     forwardForMs(BASE_SPEED, POST_TURN_FWD_MS); break;
+        case DEC_LEFT:     forwardForMs(BASE_SPEED, 1100); rotateLeft90();     forwardForMs(BASE_SPEED, POST_TURN_FWD_MS); break;
         case DEC_STRAIGHT: forwardForMs(BASE_SPEED, POST_TURN_FWD_MS);                     break;
-        case DEC_RIGHT:    forwardForMs(BASE_SPEED, 1500); rotateRight90();    forwardForMs(BASE_SPEED, POST_TURN_FWD_MS); break;
+        case DEC_RIGHT:    forwardForMs(BASE_SPEED, 1100); rotateRight90();    forwardForMs(BASE_SPEED, POST_TURN_FWD_MS); break;
         case DEC_UTURN:    rotateUTurn();      forwardForMs(BASE_SPEED, POST_TURN_FWD_MS); break;
         default:           break;
     }
