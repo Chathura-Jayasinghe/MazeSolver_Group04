@@ -35,6 +35,11 @@ const int numSensors = 8;
 #define RIGHT_IN 13 // Right motor direction (forward)
 #define ENB 10      // Right motor enable (PWM)
 
+// line Following parameters 
+int weights[numSensors] = {-3, -2, -1, 0, 0, 1, 2, 3}; // left to right weights
+float Kp = 10.0;   // proportional gain 
+int baseSpeed = 100; // base PWM speed (0–255)
+
 void setup()
 {
     Serial.begin(9600);
@@ -53,21 +58,35 @@ void setup()
 
 void runMotors(int leftPWM, int rightPWM)
 {
-    digitalWrite(LEFT_IN, leftPWM > 0 ? HIGH : LOW);
-    digitalWrite(RIGHT_IN, rightPWM > 0 ? HIGH : LOW);
-    analogWrite(ENA, abs(leftPWM));
-    analogWrite(ENB, abs(rightPWM));
+    // digitalWrite(LEFT_IN, leftPWM > 0 ? HIGH : LOW);
+    // digitalWrite(RIGHT_IN, rightPWM > 0 ? HIGH : LOW);
+    // analogWrite(ENA, abs(leftPWM));
+    // analogWrite(ENB, abs(rightPWM));
+
+    // direction pins (HIGH = forward)
+    digitalWrite(LEFT_IN, HIGH);
+    digitalWrite(RIGHT_IN, HIGH);
+
+    // PWM limits
+    leftPWM = constrain(leftPWM, 0, 255);
+    rightPWM = constrain(rightPWM, 0, 255);
+
+    analogWrite(ENA, leftPWM);
+    analogWrite(ENB, rightPWM);
 }
 
 //  Main Loop
 void loop()
 {
+
     // //// motor test code
 
     // digitalWrite(LEFT_IN, HIGH);
     // digitalWrite(RIGHT_IN, HIGH);
     // analogWrite(ENA, 200);
     // analogWrite(ENB, 200);
+
+
 
     // // check IR sensor
 
@@ -80,20 +99,71 @@ void loop()
     // Serial.println();
     // delay(500); //this will issue in later as it hold the microcontroller
 
+
+
     // check motor changing for turning
 
-    Serial.println("test: forward");
-    runMotors(200, 200);
-    delay(2000);
-    Serial.println("test: stop");
-    runMotors(0, 0);
-    delay(2000);
-    Serial.println("test: turn right");
-    runMotors(0, 200);
-    delay(2000);
-    Serial.println("test: turn left");
-    runMotors(200, 0);
-    delay(2000);
-    runMotors(0, 0);
-    delay(2000);
+    // Serial.println("test: forward");
+    // runMotors(200, 200);
+    // delay(2000);
+    // Serial.println("test: stop");
+    // runMotors(0, 0);
+    // delay(2000);
+    // Serial.println("test: turn right");
+    // runMotors(0, 200);
+    // delay(2000);
+    // Serial.println("test: turn left");
+    // runMotors(200, 0);
+    // delay(2000);
+    // runMotors(0, 0);
+    // delay(2000);
+
+
+    int sumVal = 0;
+    int weightedSum = 0;
+
+    // Read IR sensors
+    for (int i = 0; i < numSensors; i++)
+    {
+        int value = digitalRead(irPins[i]); // 1 = black line
+        if (value == HIGH)
+        {
+            weightedSum += weights[i];
+            sumVal++;
+        }
+    }
+
+    if (sumVal == 0)
+    {
+        // No line detected → stop or slow search
+        runMotors(0, 0);
+        Serial.println("Line lost!");
+        delay(50);
+        return;
+    }
+
+    // Compute line error
+    float error = (float)weightedSum / sumVal;
+
+    // P-controller
+    float correction = Kp * error;
+
+    // Adjust motor speeds
+    int leftPWM = baseSpeed - correction;
+    int rightPWM = baseSpeed + correction;
+
+    // Run motors
+    runMotors(leftPWM, rightPWM);
+
+    // Debug output
+    Serial.print("Err: ");
+    Serial.print(error);
+    Serial.print(" | Corr: ");
+    Serial.print(correction);
+    Serial.print(" | L: ");
+    Serial.print(leftPWM);
+    Serial.print(" | R: ");
+    Serial.println(rightPWM);
+
+    delay(50); // small delay for stability
 }
