@@ -18,3 +18,4 @@ const int numSensors = 8;
 #define LEFT_MOTOR_IN2 8    // Left motor reverse
 #define RIGHT_MOTOR_IN1 6   // Right motor forward
 #define RIGHT_MOTOR_IN2 5   // Right motor reverse
+
