@@ -38,7 +38,11 @@ const int numSensors = 8;
 // line Following parameters 
 int weights[numSensors] = {-3, -2, -1, 0, 0, 1, 2, 3}; // left to right weights
 float Kp = 10.0;   // proportional gain 
+float Kd = 60.0; 
 int baseSpeed = 100; // base PWM speed (0–255)
+
+float prevError = 0;
+unsigned long prevTime = 0;
 
 void setup()
 {
@@ -142,11 +146,18 @@ void loop()
         return;
     }
 
-    // Compute line error
+    // compute proportional error 
     float error = (float)weightedSum / sumVal;
 
-    // P-controller
-    float correction = Kp * error;
+    //derivative term
+    unsigned long now = millis();
+    float dt = (now - prevTime) / 1000.0;
+    float derivative = 0;
+    if (dt > 0.0)
+        derivative = (error - prevError) / dt;
+
+    //PD Controller Output 
+    float correction = Kp * error + Kd * derivative;
 
     // Adjust motor speeds
     int leftPWM = baseSpeed - correction;
@@ -165,5 +176,7 @@ void loop()
     Serial.print(" | R: ");
     Serial.println(rightPWM);
 
-    delay(50); // small delay for stability
+    prevError = error;
+    prevTime = now;
+    delay(20); // small delay for stability
 }
