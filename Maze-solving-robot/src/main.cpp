@@ -26,6 +26,8 @@
 #define BASE_SPEED 100
 #define MAX_CORRECTION 40
 #define ALIGNMENT_THRESHOLD 1.0
+
+// PD controller gains
 #define Kp 2.0
 #define Kd 1.0
 float lastError = 0.0f;
@@ -285,10 +287,20 @@ void rotateLeft90()  { Turn90(+1); }
 void rotateRight90() { Turn90(-1); }
 
 void rotateUTurn() {
-
-    rotateLeft90();
-    delay(100);
-    rotateLeft90();
+    if(ranges.right_cm > ranges.left_cm) {
+        rotateRight90();
+        delay(100);
+        rotateRight90();
+        return;
+    }else{
+        rotateLeft90();
+        delay(100);
+        rotateLeft90();
+        return;
+    }
+    // rotateLeft90();
+    // delay(100);
+    // rotateLeft90();
 }
 
 void executeDecision(Decision d) {
