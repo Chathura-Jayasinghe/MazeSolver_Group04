@@ -26,7 +26,10 @@
 #define BASE_SPEED 100
 #define MAX_CORRECTION 40
 #define ALIGNMENT_THRESHOLD 1.0
-#define CORRECTION_GAIN 2.0
+#define Kp 2.0
+#define Kd 1.0
+float lastError = 0.0f;
+unsigned long lastUpdateTime = 0;
 
 // ===== Maze thresholds (tune on your maze) =====
 #define FRONT_STOP_CM   OBSTACLE_DISTANCE
@@ -36,12 +39,8 @@
 // Turn parameters
 #define COUNTS_PER_360  444L               
 #define COUNTS_PER_90   280
-#define TURN_SPEED    100              
-
-// PID parameters for wall following
-#define INTEGRAL_LIMIT      100.0f 
-float integralError = 0.0f;
-unsigned long lastUpdateTime = 0;
+#define TURN_SPEED    100 
+             
 
 // Motor objects
 MotorPID leftMotor(MOTOR1_IN1, MOTOR1_IN2, ENCODER1_A, ENCODER1_B, true);
@@ -159,25 +158,45 @@ void readSensors() {
 
 void calculateWallFollowingSpeeds(int &leftSpeed, int &rightSpeed) {
     unsigned long now = millis();
-    float dt = (now - lastUpdateTime) / 1000.0f; 
+    float dt = (now - lastUpdateTime) / 1000.0f;
 
-    if (dt <= 0) dt = 0.01f; 
+    if (dt <= 0) dt = 0.01f;  // Prevent division by zero
     lastUpdateTime = now;
 
+    // Calculate error between left and right distances
     float error = ranges.left_cm - ranges.right_cm;
 
     if (fabsf(error) < ALIGNMENT_THRESHOLD) error = 0.0f;
 
-    integralError += error * dt;
-    integralError = constrain(integralError, -INTEGRAL_LIMIT, INTEGRAL_LIMIT);
+    // if (error>25.0f && error<50.0f){
+    //     leftSpeed  = BASE_SPEED - 40;
+    //     rightSpeed = BASE_SPEED + 40;
+    //     delay(50);
+    //     leftMotor.setSpeed(0);
+    //     rightMotor.setSpeed(0);
+    //     return; 
+    // }
+    // if(error<-25.0f && error>-50.0f){
+    //     leftSpeed  = BASE_SPEED + 40;
+    //     rightSpeed = BASE_SPEED - 40;
+    //     delay(50);
+    //     leftMotor.setSpeed(0);
+    //     rightMotor.setSpeed(0);
+    //     return; 
+    // }
 
-    float correction = (CORRECTION_GAIN * error) + (0.05 * integralError);
+    // ---- PD Control ----
+    float derivative = (error - lastError) / dt;
+    lastError = error;
+
+    float correction = (Kp * error) + (Kd * derivative);
     correction = constrain(correction, -MAX_CORRECTION, MAX_CORRECTION);
 
+    // ---- Motor Speed Adjustment ----
     leftSpeed  = constrain(BASE_SPEED - correction, 0, 255);
     rightSpeed = constrain(BASE_SPEED + correction, 0, 255);
-
 }
+
 
 // Function to move forward with wall following
 void moveForwardWithWallFollowing() {
@@ -323,3 +342,6 @@ void loop() {
     leftMotor.update();
     rightMotor.update();
 }
+
+
+
