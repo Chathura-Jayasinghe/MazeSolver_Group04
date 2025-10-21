@@ -22,7 +22,7 @@ const int numSensors = 8;
 // Line Following parameters
 int   weights[numSensors] = {-3, -2, -1, 0, 0, 1, 2, 3}; // left→right
 float Kp = 35.0;   // proportional gain
-float Kd = 1.2;    // derivative gain (small, as requested)
+float Kd = 1.3;    // derivative gain (small, as requested)
 int   baseSpeed = 80;
 
 float prevError = 0.0f;
