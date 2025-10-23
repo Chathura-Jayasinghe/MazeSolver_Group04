@@ -66,7 +66,7 @@ public:
     void setCurrentState(RobotState state) { currentState = state; }
     void forwardForMs(int pwmBase, long targetPulses);
      void moveForwardWithWallFollowing();
-     //void readSensors();
+     void readSensors();
 
 
 private:
@@ -91,7 +91,7 @@ private:
 
     // Helper functions
     float ultrasonic_sensor_distance(int trigPin, int echoPin);
-    void readSensors();
+    // void readSensors();
     bool allWhiteDetected();  // Check if all IR sensors detect white
     bool sideIsOpen(float d);
     long encLeft();

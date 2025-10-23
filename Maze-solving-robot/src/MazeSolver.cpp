@@ -58,7 +58,10 @@ bool MazeSolver::allWhiteDetected() {
     }
     
     // If all sensors read LOW (0), all white detected
-    return (sumVal == 0);
+    Serial.print("IR Sum: ");
+    Serial.println(sumVal);
+    return (sumVal <= 2);
+    
 }
 
 bool MazeSolver::sideIsOpen(float d) { 
@@ -175,7 +178,7 @@ void MazeSolver::forwardForMs(int pwmBase, long targetPulses) {
             // Serial.println("Obstacle detected! Stopping.");
             break;
         }
-        delayMicroseconds(700);
+        // delayMicroseconds(700);
     }
     stopMotors();
     encZeroBoth();  

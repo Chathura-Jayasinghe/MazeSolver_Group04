@@ -37,21 +37,6 @@ MotorPID rightMotor(MOTOR2_IN1, MOTOR2_IN2, ENCODER2_A, ENCODER2_B, true);
 MazeSolver mazeSolver(leftMotor, rightMotor);
 LineFollower lineFollower(leftMotor, rightMotor);
 
-bool allWhiteDetected() {
-    int sumVal = 0;
-    
-    for (int i = 0; i < numSensors; i++) {
-        int value = digitalRead(irPins[i]);
-        sumVal += value;
-    }
-    
-    if (sumVal == 0) {
-        mazeSolver.forwardForMs(80, 10);
-        return false;
-    } else {
-        return true;
-    }
-}
 
 void setup() {
     Serial.begin(9600);
@@ -93,29 +78,41 @@ void setup() {
 //         }
 //     }
 // }
+int condition = 1;
 bool linedetectfirst = false;
+
 void loop() {
-if (currentRunMode && !linedetectfirst){
-    linedetectfirst = true;
-    leftMotor.setDirection(true);
-    rightMotor.setDirection(true);
-    leftMotor.setSpeed(80);
-    rightMotor.setSpeed(80);
-    leftMotor.update();
-    rightMotor.update();
-    delay(4000);
-    leftMotor.setSpeed(0);
-    rightMotor.setSpeed(0);
-    // Serial.println("Line following update complete");
-} 
-else if (linedetectfirst){
-    lineFollower.update();
-} else {
+    if (currentRunMode && !(condition>25)) {
+        if (condition==25){
+            linedetectfirst = true;
+        }
+
+        mazeSolver.readSensors();
+        mazeSolver.forwardForMs(80, 15);
+        // Serial.println("Maze Solving Mode Active - Moving Forward");
+        mazeSolver.moveForwardWithWallFollowing();
+        // leftMotor.setDirection(true);
+        // rightMotor.setDirection(true);
+        // leftMotor.setSpeed(80);
+        // rightMotor.setSpeed(80);
+        // leftMotor.update();
+        // rightMotor.update();
+        // Serial.println("Switching to Line Following -- move forward for a while");
+        // delay(1000);
+        condition++;
+        // Serial.println(condition);
+        // Serial.println("Starting Line Following");
+        
+    } 
+    else if (linedetectfirst){
+        lineFollower.update();
+        Serial.println("Line Following Mode Active");
+    } else {
          // Maze solving mode - update returns true if all white detected
         bool allWhite = mazeSolver.update();
         if (allWhite) {
             currentRunMode = true;  // Switch to line following mode
-            Serial.println("Switching to Line Following Mode");
+            Serial.println("------------------------------------Switching to Line Following - Mazesolver Complete------------------------------------");
         }
     }
 }
