@@ -68,31 +68,55 @@ void setup() {
     Serial.println("Mode: Line Following (will switch to Maze Solving when all white detected)");
     delay(2000);
 }
-int linedetectfirst = 1;
-void loop() {
-    if (currentRunMode && !(linedetectfirst < 20)) {
-       linedetectfirst++;
-     ;
-    //    delay(300);
-        mazeSolver.forwardForMs(80, 30);
-    //    mazeSolver.readSensors();
-       mazeSolver.moveForwardWithWallFollowing();
-    //    delay(20000);
+// int linedetectfirst = 1;
+// void loop() {
+//     if (currentRunMode && !(linedetectfirst < 20)) {
+//        linedetectfirst++;
+//      ;
+//     //    delay(300);
+//         mazeSolver.forwardForMs(80, 30);
+//     //    mazeSolver.readSensors();
+//        mazeSolver.moveForwardWithWallFollowing();
+//     //    delay(20000);
 
-     // Serial.println("Line following update complete");
-    } else if (linedetectfirst>=20){
-        lineFollower.update();
-    }
-    else {
+//      // Serial.println("Line following update complete");
+//     } else if (linedetectfirst>=20){
+//         lineFollower.update();
+//     }
+//     else {
     
+//          // Maze solving mode - update returns true if all white detected
+//         bool allWhite = mazeSolver.update();
+//         if (allWhite) {
+//             currentRunMode = true;  // Switch to line following mode
+//             //Serial.println("Switching to Line Following Mode");
+//         }
+//     }
+// }
+bool linedetectfirst = false;
+void loop() {
+if (currentRunMode && !linedetectfirst){
+    linedetectfirst = true;
+    leftMotor.setDirection(true);
+    rightMotor.setDirection(true);
+    leftMotor.setSpeed(80);
+    rightMotor.setSpeed(80);
+    leftMotor.update();
+    rightMotor.update();
+    delay(4000);
+    leftMotor.setSpeed(0);
+    rightMotor.setSpeed(0);
+    // Serial.println("Line following update complete");
+} 
+else if (linedetectfirst){
+    lineFollower.update();
+} else {
          // Maze solving mode - update returns true if all white detected
         bool allWhite = mazeSolver.update();
         if (allWhite) {
             currentRunMode = true;  // Switch to line following mode
-            //Serial.println("Switching to Line Following Mode");
+            Serial.println("Switching to Line Following Mode");
         }
     }
 }
-
-
 
