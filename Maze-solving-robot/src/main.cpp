@@ -72,6 +72,13 @@ void setup() {
 void loop() {
     if (currentRunMode) {
        // Line following mode
+    //    leftMotor.setDirection(true);
+    //    rightMotor.setDirection(true);
+    //    leftMotor.setSpeed(80);
+    //    rightMotor.setSpeed(80);
+    //    delay(300);
+    //    rightMotor.setSpeed(0);
+    //    leftMotor.setSpeed(0);
         lineFollower.update();
     } else {
     

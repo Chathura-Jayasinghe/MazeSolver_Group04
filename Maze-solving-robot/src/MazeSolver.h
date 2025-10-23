@@ -25,7 +25,7 @@
 
 // Turn parameters
 #define COUNTS_PER_360  444L               
-#define COUNTS_PER_90   250L
+#define COUNTS_PER_90   270L //250 - CORRECT FOR YOUR ROBOT
 #define TURN_SPEED    100 
 
 struct RangeReadings {
