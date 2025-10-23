@@ -65,6 +65,9 @@ public:
     RobotState getCurrentState() { return currentState; }
     void setCurrentState(RobotState state) { currentState = state; }
     void forwardForMs(int pwmBase, long targetPulses);
+     void moveForwardWithWallFollowing();
+     //void readSensors();
+
 
 private:
     MotorPID& leftMotor;
@@ -97,7 +100,7 @@ private:
     
     // Movement functions
     void calculateWallFollowingSpeeds(int &leftSpeed, int &rightSpeed);
-    void moveForwardWithWallFollowing();
+    // void moveForwardWithWallFollowing();
     void moveForward();
     void stopMotors();
     void brakeShort();
