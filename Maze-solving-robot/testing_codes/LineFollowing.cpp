@@ -49,7 +49,7 @@ void runMotors(int leftPWM, int rightPWM)
     leftPWM = constrain(leftPWM, 0, 255);
     rightPWM = constrain(rightPWM, 0, 255);
 
-    nalogWrite(LEFT_MOTOR_IN1, leftPWM);
+    analogWrite(LEFT_MOTOR_IN1, leftPWM);
     analogWrite(LEFT_MOTOR_IN2, 0);
 
     analogWrite(RIGHT_MOTOR_IN1, rightPWM);
