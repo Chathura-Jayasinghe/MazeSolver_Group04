@@ -17,7 +17,7 @@
 // Line Following Parameters
 #define NUM_SENSORS 8
 #define BASE_SPEED_LINE 80
-#define TURN_SPEED_LINE 60
+#define TURN_SPEED_LINE 80
 #define SEARCH_DURATION_MS 300
 
 // Turn Search State Machine
