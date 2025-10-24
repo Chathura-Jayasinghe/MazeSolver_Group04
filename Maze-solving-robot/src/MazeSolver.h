@@ -106,6 +106,7 @@ private:
     void brakeShort();
     void correctionRotate();
     void Turn90(int dir);
+    void TurnWithPulse(int counts, int dir);
     void rotateLeft90();
     void rotateRight90();
     void reverseMotors(int duration_ms);

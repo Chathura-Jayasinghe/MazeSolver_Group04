@@ -230,6 +230,31 @@ void MazeSolver::Turn90(int dir) {
     encZeroBoth(); 
 }
 
+
+void MazeSolver::TurnWithPulse(int counts, int dir) {
+    const long target = counts;
+
+    leftMotor.setDirection(dir > 0);
+    rightMotor.setDirection(dir < 0);
+
+    encZeroBoth();
+
+    leftMotor.setSpeed(TURN_SPEED);
+    rightMotor.setSpeed(TURN_SPEED);
+
+    while (true) {
+        long cL = labs(encLeft());
+        long cR = labs(encRight());
+
+        long avg = (cL + cR) >> 1;
+        if (avg >= target) break;  
+
+        delayMicroseconds(800);
+    }
+    stopMotors();
+    encZeroBoth(); 
+}
+
 void MazeSolver::rotateLeft90() { 
     Turn90(+1); 
 }
@@ -249,16 +274,30 @@ void MazeSolver::reverseMotors(int duration_ms) {
 
 void MazeSolver::rotateUTurn() {
     if (ranges.right_cm > ranges.left_cm) {
-        rotateRight90();
+        TurnWithPulse(COUNTS_PER_90/4, -1);
         delay(100);
-        // reverseMotors(200);
-        rotateRight90();
+        reverseMotors(150);
+        TurnWithPulse(COUNTS_PER_90/4, -1);
+        delay(100);
+        reverseMotors(150);
+        TurnWithPulse(COUNTS_PER_90/4, -1);
+        delay(100);
+        reverseMotors(150);
+        TurnWithPulse(COUNTS_PER_90/4, -1);
+        delay(100);
         return;
     } else {
-        rotateLeft90();
+        TurnWithPulse(COUNTS_PER_90/2, +1);
         delay(100);
-        // reverseMotors(200);
-        rotateLeft90();
+        reverseMotors(150);
+        TurnWithPulse(COUNTS_PER_90/2, +1);
+        delay(100);
+        reverseMotors(150);
+        TurnWithPulse(COUNTS_PER_90/2, +1);
+        delay(100);
+        reverseMotors(150);
+        TurnWithPulse(COUNTS_PER_90/2, +1);
+        delay(100);
         return;
     }
 }
