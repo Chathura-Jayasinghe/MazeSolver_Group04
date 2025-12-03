@@ -45,7 +45,7 @@ bool allWhiteDetected() {
         sumVal += value;
     }
     
-    if (sumVal == 0) {
+    if (sumVal == 0) { 
         mazeSolver.forwardForMs(80, 10);
         return false;
     } else {

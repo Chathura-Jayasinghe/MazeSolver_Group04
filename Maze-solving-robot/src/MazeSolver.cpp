@@ -92,7 +92,7 @@ void MazeSolver::calculateWallFollowingSpeeds(int &leftSpeed, int &rightSpeed) {
     float derivative = (error - lastError) / dt;
     lastError = error;
 
-    float correction = (Kp * 1.5 * error) + (Kd * derivative);
+    float correction = (Kp * 1.5 * error) + (Kd * derivative); // 1.5
     correction = constrain(correction, -MAX_CORRECTION, MAX_CORRECTION);
 
     leftSpeed  = constrain(BASE_SPEED - correction, 0, 255);
@@ -245,19 +245,26 @@ void MazeSolver::reverseMotors(int duration_ms) {
 }
 
 void MazeSolver::rotateUTurn() {
-    if (ranges.right_cm > ranges.left_cm) {
         rotateRight90();
         delay(100);
-        // reverseMotors(200);
+        reverseMotors(200);
         rotateRight90();
         return;
-    } else {
-        rotateLeft90();
-        delay(100);
-        // reverseMotors(200);
-        rotateLeft90();
-        return;
-    }
+    // if (ranges.right_cm > ranges.left_cm) {
+    //     rotateRight90();
+
+    
+    //     delay(100);
+    //     // reverseMotors(200);
+    //     //rotateRight90();
+    //     return;
+    // } else {
+    //     rotateLeft90();
+    //     delay(100);
+    //     // reverseMotors(200);
+    //     //rotateLeft90();
+    //     return;
+    // }
 }
 
 JunctionType MazeSolver::classifyJunction(const RangeReadings& r) {
@@ -285,9 +292,9 @@ Decision MazeSolver::decideAction(JunctionType jt) {
 
 void MazeSolver::executeDecision(Decision d) {
     switch (d) {
-        case DEC_LEFT:      forwardForMs(BASE_SPEED, 330); rotateLeft90();  forwardForMs(BASE_SPEED, 200); break;
+        case DEC_LEFT:      forwardForMs(BASE_SPEED, 220); rotateLeft90();  forwardForMs(BASE_SPEED, 210); break; //
         case DEC_STRAIGHT:  break;
-        case DEC_RIGHT:     forwardForMs(BASE_SPEED, 330); rotateRight90();  forwardForMs(BASE_SPEED, 200); break;
+        case DEC_RIGHT:     forwardForMs(BASE_SPEED, 220); rotateRight90();  forwardForMs(BASE_SPEED, 210); break;
         case DEC_UTURN:     rotateUTurn();     break;
         default:            break;
     }

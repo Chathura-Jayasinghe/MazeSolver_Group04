@@ -86,8 +86,8 @@ private:
     const float TARGET_DIST_CM     = 6.0f;
     const float MAX_DETECT_DIST    = 80.0f;
     const float MIN_VALID_DIST     = 5.0f;
-    const float Kp                 = 3.0f;
-    const float Kd                 = 0.0f;
+    const float Kp                 = 6.0f;  // 3
+    const float Kd                 = 0.3f;
 
     // Helper functions
     float ultrasonic_sensor_distance(int trigPin, int echoPin);
