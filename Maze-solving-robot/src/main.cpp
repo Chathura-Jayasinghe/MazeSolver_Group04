@@ -113,10 +113,10 @@ else if (linedetectfirst){
 } else {
          // Maze solving mode - update returns true if all white detected
         bool allWhite = mazeSolver.update();
-        if (allWhite) {
-            currentRunMode = true;  // Switch to line following mode
-            Serial.println("Switching to Line Following Mode");
-        }
+        // if (allWhite) {
+        //     currentRunMode = true;  // Switch to line following mode
+        //     Serial.println("Switching to Line Following Mode");
+        // }
     }
 }
 
