@@ -25,8 +25,8 @@
 
 // Turn parameters
 #define COUNTS_PER_360  444L               
-#define COUNTS_PER_90   270L //250 - CORRECT FOR YOUR ROBOT
-#define TURN_SPEED    100 
+#define COUNTS_PER_90   250L //250 - CORRECT FOR YOUR ROBOT
+#define TURN_SPEED    60 
 
 struct RangeReadings {
     float front_cm = -1.0f;
@@ -86,11 +86,12 @@ private:
     const float TARGET_DIST_CM     = 6.0f;
     const float MAX_DETECT_DIST    = 80.0f;
     const float MIN_VALID_DIST     = 5.0f;
-    const float Kp                 = 3.0f;
-    const float Kd                 = 0.0f;
+    const float Kp                 = 2.2f;
+    const float Kd                 = 0.01f;
 
     // Helper functions
     float ultrasonic_sensor_distance(int trigPin, int echoPin);
+    float readUltrasonicAvg(int trigPin, int echoPin, int samples = 3);
     void readSensors();
     bool allWhiteDetected();  // Check if all IR sensors detect white
     bool sideIsOpen(float d);

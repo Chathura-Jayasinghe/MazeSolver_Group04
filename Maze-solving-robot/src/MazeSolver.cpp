@@ -36,14 +36,37 @@ float MazeSolver::ultrasonic_sensor_distance(int trigPin, int echoPin) {
     return distance_cm;
 }
 
+float MazeSolver::readUltrasonicAvg(int trigPin, int echoPin, int samples=3) {
+    float sum = 0.0f;
+    int valid = 0;
+    for (int i = 0; i < samples; i++) {
+        float d = ultrasonic_sensor_distance(trigPin, echoPin);
+        if (d > 0) {
+            sum += d;
+            valid++;
+        }
+        delay(5);
+    }
+    if (valid == 0) return -1.0f;
+    return sum / valid;
+}
+
 void MazeSolver::readSensors() {
-    ranges.front_cm = ultrasonic_sensor_distance(US_FRONT_TRIG, US_FRONT_ECHO);
+    ranges.front_cm = readUltrasonicAvg(US_FRONT_TRIG, US_FRONT_ECHO);
+    
     delay(10);
-    ranges.left_cm = ultrasonic_sensor_distance(US_LEFT_TRIG, US_LEFT_ECHO);
+    
+    ranges.left_cm = readUltrasonicAvg(US_LEFT_TRIG, US_LEFT_ECHO);
+    
     delay(10);
-    ranges.right_cm = ultrasonic_sensor_distance(US_RIGHT_TRIG, US_RIGHT_ECHO);
+    
+    ranges.right_cm = readUltrasonicAvg(US_RIGHT_TRIG, US_RIGHT_ECHO);
+    
     delay(10);
 }
+
+
+
 
 bool MazeSolver::allWhiteDetected() {
     if (irPins == nullptr || irPinCount == 0) {
