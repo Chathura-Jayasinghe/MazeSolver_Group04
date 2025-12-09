@@ -31,11 +31,47 @@ void setup() {
 }
 
 void loop() {
-    if (!mazeSolver.isFinished()) {
-        mazeSolver.runStep();
-    } else {
-        // Target Reached! Celebrate!
-        Serial.println("TARGET REACHED");
-        delay(10000); 
+    // --- Mode selection (temporary booleans; replace with switch later) ---
+    static bool modeScan = true;    // Mode 1: explore + build map until IR white
+    static bool modeFollow = false; // Mode 2: follow precomputed shortest path
+    static bool modeReset = false;  // Mode 3: clear memory and pose
+
+    // Example toggling logic placeholder:
+    // You can change these booleans at runtime based on a physical switch later.
+
+    if (modeReset) {
+        mazeSolver.reset();
+        modeReset = false;
+        modeScan = true;
+        modeFollow = false;
+        Serial.println("RESET DONE");
+        delay(500);
+        return;
+    }
+
+    if (modeScan) {
+        if (!mazeSolver.isFinished()) {
+            mazeSolver.runStep();
+        } else {
+            Serial.println("TARGET DETECTED (IR or coords). Computing path...");
+            mazeSolver.computeShortestPath();
+            // switch to follow mode
+            modeScan = false;
+            modeFollow = true;
+            Serial.println("PATH READY. Switching to follow mode.");
+            delay(500);
+        }
+        return;
+    }
+
+    if (modeFollow) {
+        // Follow the stored shortest path one step at a time
+        mazeSolver.followShortestPathStep();
+        // When path done, stop
+        if (mazeSolver.isFinished()) {
+            Serial.println("TARGET REACHED - FOLLOW MODE COMPLETE");
+            delay(1000);
+        }
+        return;
     }
 }

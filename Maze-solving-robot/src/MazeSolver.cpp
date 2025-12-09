@@ -17,6 +17,9 @@ MazeSolver::MazeSolver(MotorPID& left, MotorPID& right)
             dist[x][y]  = 255; 
         }
     }
+
+    pathLen = 0;
+    pathIndex = 0;
 }
 
 void MazeSolver::begin() {
@@ -26,6 +29,11 @@ void MazeSolver::begin() {
     pinMode(US_LEFT_ECHO, INPUT);
     pinMode(US_RIGHT_TRIG, OUTPUT); 
     pinMode(US_RIGHT_ECHO, INPUT);
+    // Configure IR sensors same as line follower
+    const int irPins[NUM_SENSORS] = {IR1, IR2, IR3, IR4, IR5, IR6, IR7, IR8};
+    for (int i = 0; i < NUM_SENSORS; i++) {
+        pinMode(irPins[i], INPUT);
+    }
     
     stopMotors();
 }
@@ -49,6 +57,7 @@ void MazeSolver::runStep() {
 
     // 5. Execute Move
     turnTo(nextDir);
+    Serial.println("Moving to (" + String(currX) + "," + String(currY) + ") facing " + String(currDir));
     moveOneCell();
     
     // 6. Update Virtual Coordinates
@@ -59,12 +68,23 @@ void MazeSolver::runStep() {
     
     // Small stop to stabilize before next reading
     stopMotors();
-    
-    delay(200);
 }
 
 bool MazeSolver::isFinished() {
-    return (currX == TARGET_X && currY == TARGET_Y);
+    // Finish if coordinates reach target or IR sees white target
+    if (currX == TARGET_X && currY == TARGET_Y) return true;
+    return isTargetDetectedIR();
+}
+
+bool MazeSolver::isTargetDetectedIR() {
+    // Treat HIGH on any IR sensor as white target detected
+    const int irPins[NUM_SENSORS] = {IR1, IR2, IR3, IR4, IR5, IR6, IR7, IR8};
+    for (int i = 0; i < NUM_SENSORS; i++) {
+        if (digitalRead(irPins[i]) == HIGH) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // --- Flood Fill Implementation ---
@@ -183,24 +203,98 @@ Direction MazeSolver::getBestDirection() {
     return bestDir;
 }
 
+Direction MazeSolver::getBestDirectionAt(int x, int y) {
+    int minDist = 255;
+    Direction bestDir = NORTH;
+
+    if(y < MAZE_SIZE-1 && !(walls[x][y] & WALL_NORTH)) {
+        if(dist[x][y+1] < minDist) { minDist = dist[x][y+1]; bestDir = NORTH; }
+    }
+    if(x < MAZE_SIZE-1 && !(walls[x][y] & WALL_EAST)) {
+        if(dist[x+1][y] < minDist) { minDist = dist[x+1][y]; bestDir = EAST; }
+    }
+    if(y > 0 && !(walls[x][y] & WALL_SOUTH)) {
+        if(dist[x][y-1] < minDist) { minDist = dist[x][y-1]; bestDir = SOUTH; }
+    }
+    if(x > 0 && !(walls[x][y] & WALL_WEST)) {
+        if(dist[x-1][y] < minDist) { minDist = dist[x-1][y]; bestDir = WEST; }
+    }
+    return bestDir;
+}
+
+void MazeSolver::computeShortestPath() {
+    // Recompute flood fill distances first
+    floodFill();
+
+    // Build path from start (0,0) to target using decreasing dist
+    int x = 0, y = 0;
+    Direction d;
+    pathLen = 0;
+    pathIndex = 0;
+
+    // Guard: if start unreachable, keep empty path
+    if (dist[x][y] == 255) return;
+
+    // Limit steps to grid size to avoid infinite loops
+    for(int steps=0; steps<MAZE_SIZE*MAZE_SIZE; steps++) {
+        if (x == TARGET_X && y == TARGET_Y) break;
+        d = getBestDirectionAt(x, y);
+        path[pathLen++] = d;
+        // advance virtual position
+        if(d == NORTH) y++;
+        else if(d == EAST) x++;
+        else if(d == SOUTH) y--;
+        else if(d == WEST) x--;
+    }
+}
+
+void MazeSolver::followShortestPathStep() {
+    if (pathIndex >= pathLen) { stopMotors(); return; }
+    Direction nextDir = path[pathIndex];
+    turnTo(nextDir);
+    moveOneCell();
+    if(currDir == NORTH) currY++;
+    else if(currDir == EAST) currX++;
+    else if(currDir == SOUTH) currY--;
+    else if(currDir == WEST) currX--;
+    stopMotors();
+    pathIndex++;
+}
+
+void MazeSolver::reset() {
+    // Reset robot pose and map
+    currX = 0;
+    currY = 0;
+    currDir = NORTH;
+    for(int x=0; x<MAZE_SIZE; x++) {
+        for(int y=0; y<MAZE_SIZE; y++) {
+            walls[x][y] = 0;
+            dist[x][y]  = 255;
+        }
+    }
+    pathLen = 0;
+    pathIndex = 0;
+    stopMotors();
+}
+
 // --- Movement ---
 void MazeSolver::turnTo(Direction targetDir) {
     int diff = (targetDir - currDir);
         
     if (diff == 0) {
         // Straight - Do nothing
-        Serial.println("straight");
+        // Serial.println("straight");
     } else if (diff == 1 || diff == -3) {
         turnRight();
-        Serial.println("right");
+        // Serial.println("right");
         // while (true){};
     } else if (diff == -1 || diff == 3) {
         turnLeft();
-        Serial.println("left");
+        // Serial.println("left");
         // while (true){};
     } else {
         turnAround();
-        Serial.println("u turn");
+        // Serial.println("u turn");
         // while (true){};
     }
     
@@ -233,19 +327,18 @@ void MazeSolver::moveOneCell() {
         bool rightWallExists = (rightDist > 0 && rightDist < WALL_THRESHOLD * 1.2);
         bool leftWallExists = (leftDist > 0 && leftDist < WALL_THRESHOLD * 1.2);
 
-        Serial.println("Left wall: " + String(leftDist) + " Right wall: " + String(rightDist) + "front dist: " + String(readSensor(US_FRONT_TRIG, US_FRONT_ECHO)));
+    //    Serial.println("Left wall: " + String(leftWallExists) + " Right wall: " + String(rightWallExists) + "front dist: " + String(readSensor(US_FRONT_TRIG, US_FRONT_ECHO)));
 
         if(rightWallExists && leftWallExists) {
-            // Both walls present, try to center
             error = leftDist - rightDist+1;
+
         } else if (rightWallExists) {
-            // Follow right wall
             error = DESIRED_WALL_DISTANCE - rightDist;
+
         } else if (leftWallExists) {
-            // Follow left wall
             error = leftDist - DESIRED_WALL_DISTANCE+1;
+
         } else {
-            // No side walls, go straight
             error = 0;
         }
 
