@@ -14,7 +14,7 @@
 
 // Control parameters
 #define OBSTACLE_DISTANCE 3 //8 thibbe
-#define BASE_SPEED 50
+#define BASE_SPEED 70
 #define MAX_CORRECTION 40
 #define ALIGNMENT_THRESHOLD 1.0
 
@@ -26,7 +26,7 @@
 // Turn parameters
 #define COUNTS_PER_360  444L               
 #define COUNTS_PER_90   230L //250 - CORRECT FOR YOUR ROBOT   // 270 thibbe
-#define TURN_SPEED    40 
+#define TURN_SPEED    60 
 
 struct RangeReadings {
     float front_cm = -1.0f;

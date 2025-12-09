@@ -291,6 +291,7 @@ JunctionType MazeSolver::classifyJunction(const RangeReadings& r) {
 
     if (leftOpen && !rightOpen)  return JT_L_LEFT;
     else if (!leftOpen && rightOpen)  return JT_L_RIGHT;
+    //else if (leftOpen && !frontBlocked)   return JT_L_LEFT;
     else if (leftOpen && rightOpen)   return frontBlocked ? JT_T : JT_CROSS_OR_CORNER;
     else                             return frontBlocked ? JT_DEAD_END : JT_STRAIGHT;
 }
@@ -309,9 +310,9 @@ Decision MazeSolver::decideAction(JunctionType jt) {
 
 void MazeSolver::executeDecision(Decision d) {
     switch (d) {
-        case DEC_LEFT:      forwardForMs(BASE_SPEED, 500); rotateLeft90();  forwardForMs(BASE_SPEED, 150); break; //330 200 thibbe
+        case DEC_LEFT:      forwardForMs(BASE_SPEED, 380); rotateLeft90();  forwardForMs(BASE_SPEED, 150); break; //330 200 thibbe
         case DEC_STRAIGHT:  break;
-        case DEC_RIGHT:     forwardForMs(BASE_SPEED, 500); rotateRight90();  forwardForMs(BASE_SPEED, 150); break;
+        case DEC_RIGHT:     forwardForMs(BASE_SPEED, 380); rotateRight90();  forwardForMs(BASE_SPEED, 150); break;
         case DEC_UTURN:     rotateUTurn();     break;
         default:            break;
     }
