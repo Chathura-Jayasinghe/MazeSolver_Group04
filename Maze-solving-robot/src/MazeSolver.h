@@ -14,7 +14,7 @@
 
 // Control parameters
 #define OBSTACLE_DISTANCE 3 //8 thibbe
-#define BASE_SPEED 70
+#define BASE_SPEED 50
 #define MAX_CORRECTION 40
 #define ALIGNMENT_THRESHOLD 1.0
 
@@ -26,7 +26,7 @@
 // Turn parameters
 #define COUNTS_PER_360  444L               
 #define COUNTS_PER_90   230L //250 - CORRECT FOR YOUR ROBOT   // 270 thibbe
-#define TURN_SPEED    60 
+#define TURN_SPEED    40
 
 struct RangeReadings {
     float front_cm = -1.0f;
@@ -84,7 +84,7 @@ private:
     float lastError;
     unsigned long lastUpdateTime;
     const float TARGET_DIST_CM     = 6.0f;
-    const float MAX_DETECT_DIST    = 80.0f;
+    const float MAX_DETECT_DIST    = 25.0f;
     const float MIN_VALID_DIST     = 3.0f;   // 5 thibbe
     const float Kp                 = 2.2f;   // 5 thibbe
     const float Kd                 = 0.01f;   // 0 thibbe
@@ -104,12 +104,9 @@ private:
     // void moveForwardWithWallFollowing();
     void moveForward();
     void stopMotors();
-    //void brakeShort();
-    //void correctionRotate();
     void Turn90(int dir);
     void rotateLeft90();
     void rotateRight90();
-    //void reverseMotors(int duration_ms);
     void rotateUTurn();
     
     // Decision making

@@ -98,9 +98,10 @@ void MazeSolver::calculateWallFollowingSpeeds(int &leftSpeed, int &rightSpeed) {
 
     if (dt <= 0) dt = 0.01f;
     lastUpdateTime = now;
-
+    
     float error = (ranges.left_cm+1) - ranges.right_cm;
     if (fabsf(error) < ALIGNMENT_THRESHOLD) error = 0.0f;
+    // if (fabsf(error) > MAX_DETECT_DIST) error = 0.0f;
 
     float derivative = (error - lastError) / dt;
     lastError = error;
@@ -271,7 +272,6 @@ void MazeSolver::executeDecision(Decision d) {
 
 bool MazeSolver::update() {
     readSensors();
-
     Serial.print("Front: ");
     Serial.print(ranges.front_cm);
     Serial.print(" cm, Left: ");
