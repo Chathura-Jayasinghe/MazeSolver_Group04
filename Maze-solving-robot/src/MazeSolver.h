@@ -85,7 +85,7 @@ private:
     unsigned long lastUpdateTime;
     const float TARGET_DIST_CM     = 6.0f;
     const float MAX_DETECT_DIST    = 80.0f;
-    const float MIN_VALID_DIST     = 5.0f;
+    const float MIN_VALID_DIST     = 3.0f;   // 5 thibbe
     const float Kp                 = 2.2f;   // 5 thibbe
     const float Kd                 = 0.01f;   // 0 thibbe
 

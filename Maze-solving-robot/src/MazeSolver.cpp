@@ -108,7 +108,7 @@ void MazeSolver::calculateWallFollowingSpeeds(int &leftSpeed, int &rightSpeed) {
     if (dt <= 0) dt = 0.01f;
     lastUpdateTime = now;
 
-    float error = ranges.left_cm - ranges.right_cm;
+    float error = (ranges.left_cm+1) - ranges.right_cm;
 
     if (fabsf(error) < ALIGNMENT_THRESHOLD) error = 0.0f;
 
@@ -203,6 +203,7 @@ void MazeSolver::forwardForMs(int pwmBase, long targetPulses) {
     stopMotors();
     encZeroBoth();  
 }
+
 
 // void MazeSolver::correctionRotate(){
 //     if (ranges.left_cm<3 && ranges.right_cm>10){
@@ -308,9 +309,9 @@ Decision MazeSolver::decideAction(JunctionType jt) {
 
 void MazeSolver::executeDecision(Decision d) {
     switch (d) {
-        case DEC_LEFT:      forwardForMs(BASE_SPEED, 500); rotateLeft90();  forwardForMs(BASE_SPEED, 250); break; //330 200 thibbe
+        case DEC_LEFT:      forwardForMs(BASE_SPEED, 500); rotateLeft90();  forwardForMs(BASE_SPEED, 150); break; //330 200 thibbe
         case DEC_STRAIGHT:  break;
-        case DEC_RIGHT:     forwardForMs(BASE_SPEED, 500); rotateRight90();  forwardForMs(BASE_SPEED, 250); break;
+        case DEC_RIGHT:     forwardForMs(BASE_SPEED, 500); rotateRight90();  forwardForMs(BASE_SPEED, 150); break;
         case DEC_UTURN:     rotateUTurn();     break;
         default:            break;
     }
