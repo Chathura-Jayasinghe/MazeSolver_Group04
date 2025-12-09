@@ -53,20 +53,12 @@ float MazeSolver::readUltrasonicAvg(int trigPin, int echoPin, int samples=3) {
 
 void MazeSolver::readSensors() {
     ranges.front_cm = readUltrasonicAvg(US_FRONT_TRIG, US_FRONT_ECHO);
-    
     //delay(10);
-    
     ranges.left_cm = readUltrasonicAvg(US_LEFT_TRIG, US_LEFT_ECHO);
-    
     //delay(10);
-    
     ranges.right_cm = readUltrasonicAvg(US_RIGHT_TRIG, US_RIGHT_ECHO);
-    
     //delay(10);
 }
-
-
-
 
 bool MazeSolver::allWhiteDetected() {
     if (irPins == nullptr || irPinCount == 0) {
@@ -74,7 +66,6 @@ bool MazeSolver::allWhiteDetected() {
     }
     
     int sumVal = 0;
-    
     for (int i = 0; i < irPinCount; i++) {
         int value = digitalRead(irPins[i]);
         sumVal += value;
@@ -109,7 +100,6 @@ void MazeSolver::calculateWallFollowingSpeeds(int &leftSpeed, int &rightSpeed) {
     lastUpdateTime = now;
 
     float error = (ranges.left_cm+1) - ranges.right_cm;
-
     if (fabsf(error) < ALIGNMENT_THRESHOLD) error = 0.0f;
 
     float derivative = (error - lastError) / dt;
@@ -144,15 +134,9 @@ void MazeSolver::stopMotors() {
     rightMotor.setSpeed(0);
 }
 
-// void MazeSolver::brakeShort() {
-//     stopMotors();
-//     delay(500);
-// }
-
 void MazeSolver::forwardForMs(int pwmBase, long targetPulses) {
     leftMotor.setDirection(true);
     rightMotor.setDirection(true);
-
     encZeroBoth();
 
     // Start with base speed; adjust inside loop using single-wall following
@@ -204,26 +188,6 @@ void MazeSolver::forwardForMs(int pwmBase, long targetPulses) {
     encZeroBoth();  
 }
 
-
-// void MazeSolver::correctionRotate(){
-//     if (ranges.left_cm<3 && ranges.right_cm>10){
-//         leftMotor.setDirection(true);
-//         rightMotor.setDirection(false);
-//         leftMotor.setSpeed(50);
-//         rightMotor.setSpeed(50);
-//         delay(100);
-//         stopMotors();
-//     }
-//     if(ranges.right_cm<3 && ranges.left_cm>10){
-//         leftMotor.setDirection(false);
-//         rightMotor.setDirection(true);
-//         leftMotor.setSpeed(50);
-//         rightMotor.setSpeed(50);
-//         delay(100);
-//         stopMotors();
-//     }
-// }
-
 void MazeSolver::Turn90(int dir) {
     const long target = COUNTS_PER_90; 
     const bool turnCW  = (dir > 0);
@@ -231,7 +195,6 @@ void MazeSolver::Turn90(int dir) {
 
     leftMotor.setDirection(turnCCW); 
     rightMotor.setDirection(turnCW); 
-
     encZeroBoth();
 
     leftMotor.setSpeed(TURN_SPEED);
@@ -259,26 +222,15 @@ void MazeSolver::rotateRight90() {
     Turn90(-1); 
 }
 
-// void MazeSolver::reverseMotors(int duration_ms) {
-//     leftMotor.setDirection(false);
-//     rightMotor.setDirection(false);
-//     leftMotor.setSpeed(BASE_SPEED);
-//     rightMotor.setSpeed(BASE_SPEED);
-//     delay(duration_ms);
-//     stopMotors();
-// }
-
 void MazeSolver::rotateUTurn() {
     if (ranges.right_cm > ranges.left_cm) {
         rotateRight90();
         delay(100);
-        // reverseMotors(200);
         rotateRight90();
         return;
     } else {
         rotateLeft90();
         delay(100);
-        // reverseMotors(200);
         rotateLeft90();
         return;
     }
@@ -291,7 +243,6 @@ JunctionType MazeSolver::classifyJunction(const RangeReadings& r) {
 
     if (leftOpen && !rightOpen)  return JT_L_LEFT;
     else if (!leftOpen && rightOpen)  return JT_L_RIGHT;
-    //else if (leftOpen && !frontBlocked)   return JT_L_LEFT;
     else if (leftOpen && rightOpen)   return frontBlocked ? JT_T : JT_CROSS_OR_CORNER;
     else                             return frontBlocked ? JT_DEAD_END : JT_STRAIGHT;
 }
