@@ -39,15 +39,15 @@ void loop() {
     // Example toggling logic placeholder:
     // You can change these booleans at runtime based on a physical switch later.
 
-    if (modeReset) {
-        mazeSolver.reset();
-        modeReset = false;
-        modeScan = true;
-        modeFollow = false;
-        Serial.println("RESET DONE");
-        delay(500);
-        return;
-    }
+    // if (modeReset) {
+    //     mazeSolver.reset();
+    //     modeReset = false;
+    //     modeScan = true;
+    //     modeFollow = false;
+    //     Serial.println("RESET DONE");
+    //     delay(500);
+    //     return;
+    // }
 
     if (modeScan) {
         if (true) {
@@ -64,14 +64,14 @@ void loop() {
         return;
     }
 
-    if (modeFollow) {
-        // Follow the stored shortest path one step at a time
-        mazeSolver.followShortestPathStep();
-        // When path done, stop
-        if (mazeSolver.isFinished()) {
-            Serial.println("TARGET REACHED - FOLLOW MODE COMPLETE");
-            delay(1000);
-        }
-        return;
-    }
+    // if (modeFollow) {
+    //     // Follow the stored shortest path one step at a time
+    //     mazeSolver.followShortestPathStep();
+    //     // When path done, stop
+    //     if (mazeSolver.isFinished()) {
+    //         Serial.println("TARGET REACHED - FOLLOW MODE COMPLETE");
+    //         delay(1000);
+    //     }
+    //     return;
+    // }
 }

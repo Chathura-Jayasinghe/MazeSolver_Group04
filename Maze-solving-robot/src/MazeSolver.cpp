@@ -43,13 +43,13 @@ void MazeSolver::runStep() {
     updateWalls();
 
     // 2. Check if we reached target
-    if(currX == TARGET_X && currY == TARGET_Y) {
-        stopMotors();
-        return; // DONE!
-    }
+    // if(currX == TARGET_X && currY == TARGET_Y) {
+    //     stopMotors();
+    //     return; // DONE!
+    // }
 
     // 3. Recalculate Distances (Flood Fill)
-    floodFill();
+    // floodFill();
 
     // 4. Decide Best Move
     Direction nextDir = getBestDirection();
@@ -158,8 +158,6 @@ void MazeSolver::updateWalls() {
     float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
     float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
 
-    Serial.print("Sensor Readings - Front: " + String(f) + " cm, Left: " + String(l) + " cm, Right: " + String(r) + " cm\n");
-
     bool wallFront = (f > 0 && f < 8);
     bool wallLeft  = (l > 0 && l < 8);
     bool wallRight = (r > 0 && r < 8);
@@ -196,67 +194,50 @@ void MazeSolver::updateWalls() {
 }
 
 Direction MazeSolver::getBestDirection() {
-    int minDist = 255;
-    Direction bestDir = currDir; // Default to straight if equal
+    Direction bestDir = currDir;
 
-    // Check all 4 neighbors. If accessible, check distance.
+    float f = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
+    float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
+    float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
+
+    Serial.print("Sensor Readings - Front: " + String(f) + " cm, Left: " + String(l) + " cm, Right: " + String(r) + " cm\n");
+
+    bool wallFront = (f > 0 && f < 10);
+    bool wallLeft  = (l > 0 && l < 10);
+    bool wallRight = (r > 0 && r < 10);
+    Serial.println("Wall Presence - Front: " + String(wallFront) + ", Left: " + String(wallLeft) + ", Right: " + String(wallRight));
+
+    if(wallFront && wallLeft && wallRight) {
+        // Dead End - Turn Around
+        bestDir = (Direction)((currDir + 2) % 4);
+        Serial.println("Dead End - Turning Around");
+    } else if(wallFront && wallRight && !wallLeft) {
+        // Left Turn Only
+        Serial.println("Left Turn Only");
+        bestDir = (Direction)((currDir + 3) % 4);
+    } else if(wallFront && wallLeft && !wallRight) {
+        // Right Turn Only
+        bestDir = (Direction)((currDir + 1) % 4);
+        Serial.println("Right Turn Only");
+    } else if(wallFront && !wallLeft && !wallRight) {
+        //T junction -  Both Left and Right Open - Choose Best Distance
+            bestDir = (Direction)((currDir + 3) % 4); // Left
+            Serial.println("Both Left and Right Open - Choosing Left");
+    } else if(!wallFront && wallRight && !wallLeft) {
+        // Left Open - Go Left
+        bestDir = (Direction)((currDir + 3) % 4);
+        Serial.println("Left Open - Going Left");
+    } else if(!wallFront && wallLeft && !wallRight) {
+        // Right Open - Go Right
+        bestDir = (Direction)((currDir + 1) % 4);
+        Serial.println("Right Open - Going Right");
+
+    }else {
+        // Front Open - Go Straight
+        bestDir = currDir;
+        Serial.println("Path Clear - Going Straight");
+    }
     
-    // // NORTH
-    // if(currY < MAZE_SIZE-1 && !(walls[currX][currY] & WALL_NORTH)) {
-    //     if(dist[currX][currY+1] < minDist) { minDist = dist[currX][currY+1]; bestDir = NORTH; }
-    // }
-    // // EAST
-    // if(currX < MAZE_SIZE-1 && !(walls[currX][currY] & WALL_EAST)) {
-    //     if(dist[currX+1][currY] < minDist) { minDist = dist[currX+1][currY]; bestDir = EAST; }
-    // }
-    // // SOUTH
-    // if(currY > 0 && !(walls[currX][currY] & WALL_SOUTH)) {
-    //     if(dist[currX][currY-1] < minDist) { minDist = dist[currX][currY-1]; bestDir = SOUTH; }
-    // }
-    // // WEST
-    // if(currX > 0 && !(walls[currX][currY] & WALL_WEST)) {
-    //     if(dist[currX-1][currY] < minDist) { minDist = dist[currX-1][currY]; bestDir = WEST; }
-    // }
-
-
-    // NORTH
-    if(currY < MAZE_SIZE-1 && 
-       !(walls[currX][currY] & WALL_NORTH) && 
-       dist[currX][currY+1] != 255) { // Ensure destination is reachable
-        if(dist[currX][currY+1] < minDist) { 
-            minDist = dist[currX][currY+1]; 
-            bestDir = NORTH; 
-        }
-    }
-    // EAST  
-    if(currX < MAZE_SIZE-1 && 
-       !(walls[currX][currY] & WALL_EAST) && 
-       dist[currX+1][currY] != 255) {
-        if(dist[currX+1][currY] < minDist) { 
-            minDist = dist[currX+1][currY]; 
-            bestDir = EAST; 
-        }
-    }
-
-    // SOUTH
-    if(currY > 0 && 
-       !(walls[currX][currY] & WALL_SOUTH) && 
-       dist[currX][currY-1] != 255) {
-        if(dist[currX][currY-1] < minDist) { 
-            minDist = dist[currX][currY-1]; 
-            bestDir = SOUTH; 
-        }
-    }
-    // WEST
-    if(currX > 0 && 
-       !(walls[currX][currY] & WALL_WEST) && 
-       dist[currX-1][currY] != 255) {
-        if(dist[currX-1][currY] < minDist) { 
-            minDist = dist[currX-1][currY]; 
-            bestDir = WEST; 
-        }
-    }
-
     return bestDir;
 }
 
@@ -415,10 +396,10 @@ void MazeSolver::moveOneCell() {
         
         // Safety: If too close to front wall, stop early
         float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
-        // if(frontDist > 0 && frontDist < 3.0) {
-        //     MET_FRONT_WALL = true;
-        //     break;
-        // }
+        if(frontDist > 0 && frontDist < 3.0) {
+            // MET_FRONT_WALL = true;
+            break;
+        }
 
         delay(10); // Loop delay for stability
     }
