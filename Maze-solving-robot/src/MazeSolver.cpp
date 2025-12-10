@@ -1,7 +1,6 @@
 #include "MazeSolver.h"
 
 
-
 MazeSolver::MazeSolver(MotorPID& left, MotorPID& right)
     : leftMotor(left), rightMotor(right) {
     
@@ -54,17 +53,30 @@ void MazeSolver::runStep() {
 
     // 4. Decide Best Move
     Direction nextDir = getBestDirection();
+    Serial.println("Before Turn Next Direction: " + String(nextDir));
+
+    Serial.println(walls[currX][currY], BIN);
 
     // 5. Execute Move
     turnTo(nextDir);
-    Serial.println("Moving to (" + String(currX) + "," + String(currY) + ") facing " + String(currDir));
+    Serial.println("After Turn Moving from (" + String(currX) + "," + String(currY) + ") facing " + String(currDir));
+    MET_FRONT_WALL = false;
     moveOneCell();
+    Serial.println("Current Position (" + String(currX) + "," + String(currY) + ")");
     
     // 6. Update Virtual Coordinates
+    // if (MET_FRONT_WALL) {
+    //     Serial.println("MET FRONT WALL DURING MOVE, POSITION NOT UPDATED");
+    //     return;
+    // }
+
     if(currDir == NORTH) currY++;
     else if(currDir == EAST) currX++;
     else if(currDir == SOUTH) currY--;
     else if(currDir == WEST) currX--;
+    Serial.println("Next Position: (" + String(currX) + "," + String(currY) + ")");
+    Serial.println("=====================================================");
+    Serial.println();
     
     // Small stop to stabilize before next reading
     stopMotors();
@@ -146,9 +158,15 @@ void MazeSolver::updateWalls() {
     float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
     float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
 
-    bool wallFront = (f > 0 && f < DESIRED_WALL_DISTANCE);
-    bool wallLeft  = (l > 0 && l < WALL_THRESHOLD);
-    bool wallRight = (r > 0 && r < WALL_THRESHOLD);
+    Serial.print("Sensor Readings - Front: " + String(f) + " cm, Left: " + String(l) + " cm, Right: " + String(r) + " cm\n");
+
+    bool wallFront = (f > 0 && f < 8);
+    bool wallLeft  = (l > 0 && l < 8);
+    bool wallRight = (r > 0 && r < 8);
+
+    Serial.print("[IsFrontAvail] " + String(wallFront));
+    Serial.print("[IsLeftAvail] " + String(wallLeft));
+    Serial.println("[IsRightAvail] " + String(wallRight));
 
     // Map Relative (Front/Left/Right) to Absolute (N/E/S/W)
     if(wallFront) {
@@ -183,21 +201,60 @@ Direction MazeSolver::getBestDirection() {
 
     // Check all 4 neighbors. If accessible, check distance.
     
+    // // NORTH
+    // if(currY < MAZE_SIZE-1 && !(walls[currX][currY] & WALL_NORTH)) {
+    //     if(dist[currX][currY+1] < minDist) { minDist = dist[currX][currY+1]; bestDir = NORTH; }
+    // }
+    // // EAST
+    // if(currX < MAZE_SIZE-1 && !(walls[currX][currY] & WALL_EAST)) {
+    //     if(dist[currX+1][currY] < minDist) { minDist = dist[currX+1][currY]; bestDir = EAST; }
+    // }
+    // // SOUTH
+    // if(currY > 0 && !(walls[currX][currY] & WALL_SOUTH)) {
+    //     if(dist[currX][currY-1] < minDist) { minDist = dist[currX][currY-1]; bestDir = SOUTH; }
+    // }
+    // // WEST
+    // if(currX > 0 && !(walls[currX][currY] & WALL_WEST)) {
+    //     if(dist[currX-1][currY] < minDist) { minDist = dist[currX-1][currY]; bestDir = WEST; }
+    // }
+
+
     // NORTH
-    if(currY < MAZE_SIZE-1 && !(walls[currX][currY] & WALL_NORTH)) {
-        if(dist[currX][currY+1] < minDist) { minDist = dist[currX][currY+1]; bestDir = NORTH; }
+    if(currY < MAZE_SIZE-1 && 
+       !(walls[currX][currY] & WALL_NORTH) && 
+       dist[currX][currY+1] != 255) { // Ensure destination is reachable
+        if(dist[currX][currY+1] < minDist) { 
+            minDist = dist[currX][currY+1]; 
+            bestDir = NORTH; 
+        }
     }
-    // EAST
-    if(currX < MAZE_SIZE-1 && !(walls[currX][currY] & WALL_EAST)) {
-        if(dist[currX+1][currY] < minDist) { minDist = dist[currX+1][currY]; bestDir = EAST; }
+    // EAST  
+    if(currX < MAZE_SIZE-1 && 
+       !(walls[currX][currY] & WALL_EAST) && 
+       dist[currX+1][currY] != 255) {
+        if(dist[currX+1][currY] < minDist) { 
+            minDist = dist[currX+1][currY]; 
+            bestDir = EAST; 
+        }
     }
+
     // SOUTH
-    if(currY > 0 && !(walls[currX][currY] & WALL_SOUTH)) {
-        if(dist[currX][currY-1] < minDist) { minDist = dist[currX][currY-1]; bestDir = SOUTH; }
+    if(currY > 0 && 
+       !(walls[currX][currY] & WALL_SOUTH) && 
+       dist[currX][currY-1] != 255) {
+        if(dist[currX][currY-1] < minDist) { 
+            minDist = dist[currX][currY-1]; 
+            bestDir = SOUTH; 
+        }
     }
     // WEST
-    if(currX > 0 && !(walls[currX][currY] & WALL_WEST)) {
-        if(dist[currX-1][currY] < minDist) { minDist = dist[currX-1][currY]; bestDir = WEST; }
+    if(currX > 0 && 
+       !(walls[currX][currY] & WALL_WEST) && 
+       dist[currX-1][currY] != 255) {
+        if(dist[currX-1][currY] < minDist) { 
+            minDist = dist[currX-1][currY]; 
+            bestDir = WEST; 
+        }
     }
 
     return bestDir;
@@ -358,12 +415,14 @@ void MazeSolver::moveOneCell() {
         
         // Safety: If too close to front wall, stop early
         float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
-        if(frontDist > 0 && frontDist < 3.0) break;
+        // if(frontDist > 0 && frontDist < 3.0) {
+        //     MET_FRONT_WALL = true;
+        //     break;
+        // }
 
         delay(10); // Loop delay for stability
     }
     stopMotors();
-   
 }
 
 void MazeSolver::turnLeft() {

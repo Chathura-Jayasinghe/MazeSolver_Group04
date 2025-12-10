@@ -1,4 +1,3 @@
-#ifndef MAZESOLVER_H
 #define MAZESOLVER_H
 
 #include <Arduino.h>
@@ -16,7 +15,7 @@
 // IR pins and NUM_SENSORS come from LineFollower.h (IR1..IR8)
 
 // --- Calibration Constants (TUNE THESE) ---
-#define BASE_SPEED      50
+#define BASE_SPEED      70
 #define TURN_SPEED      40
 #define WALL_THRESHOLD  15.0f   // cm (If sensor reads < 15, it's a wall)
 #define COUNTS_PER_90   230L    // Encoder counts for 90 deg turn
@@ -29,8 +28,8 @@ const float DESIRED_WALL_DISTANCE = 5.5; // Desired distance from wall in cm (tu
 
 
 // --- Maze Constants ---
-#define MAZE_SIZE 9
-#define TARGET_X  4
+#define MAZE_SIZE 8
+#define TARGET_X  1
 #define TARGET_Y  4
 
 // --- Direction Enums (Clockwise) ---
@@ -67,6 +66,7 @@ private:
     // Robot State
     int currX, currY;
     Direction currDir;
+    bool MET_FRONT_WALL;
     
     // The Map
     byte walls[MAZE_SIZE][MAZE_SIZE];
@@ -97,5 +97,3 @@ private:
     long encRight();
     void encZero();
 };
-
-#endif

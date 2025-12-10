@@ -50,14 +50,14 @@ void loop() {
     }
 
     if (modeScan) {
-        if (!mazeSolver.isFinished()) {
+        if (true) {
             mazeSolver.runStep();
         } else {
             Serial.println("TARGET DETECTED (IR or coords). Computing path...");
             mazeSolver.computeShortestPath();
             // switch to follow mode
-            modeScan = false;
-            modeFollow = true;
+            // modeScan = false;
+            // modeFollow = true;
             Serial.println("PATH READY. Switching to follow mode.");
             delay(500);
         }
