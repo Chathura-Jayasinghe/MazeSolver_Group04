@@ -195,7 +195,7 @@ void MazeSolver::updateWalls()
     float f = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
     float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
     float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
-
+    Serial1.println("Sensor Readings - Front: " + String(f) + " cm, Left: " + String(l) + " cm, Right: " + String(r) + " cm");
     bool wallFront = (f > 0 && f < 8);
     bool wallLeft = (l > 0 && l < 8);
     bool wallRight = (r > 0 && r < 8);
