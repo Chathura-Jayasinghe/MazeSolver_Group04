@@ -25,6 +25,7 @@ void setup() {
     rightMotor.begin();
     mazeSolver.begin();
 
+    Serial.println();
     Serial.println("FLOOD FILL MAZE SOLVER");
     Serial.println("Starting in 2 seconds...");
     delay(2000);
@@ -33,8 +34,8 @@ void setup() {
 void loop() {
     // --- Mode selection (temporary booleans; replace with switch later) ---
     static bool modeScan = true;    // Mode 1: explore + build map until IR white
-    static bool modeFollow = false; // Mode 2: follow precomputed shortest path
-    static bool modeReset = false;  // Mode 3: clear memory and pose
+    // static bool modeFollow = false; // Mode 2: follow precomputed shortest path
+    // static bool modeReset = false;  // Mode 3: clear memory and pose
 
     // Example toggling logic placeholder:
     // You can change these booleans at runtime based on a physical switch later.
@@ -53,12 +54,12 @@ void loop() {
         if (true) {
             mazeSolver.runStep();
         } else {
-            Serial.println("TARGET DETECTED (IR or coords). Computing path...");
+            Serial.println("-------maze scanning completed-------");
             mazeSolver.computeShortestPath();
             // switch to follow mode
             // modeScan = false;
             // modeFollow = true;
-            Serial.println("PATH READY. Switching to follow mode.");
+            // Serial.println("PATH READY. Switching to follow mode.");
             delay(500);
         }
         return;

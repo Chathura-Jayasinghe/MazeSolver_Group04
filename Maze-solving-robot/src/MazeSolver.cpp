@@ -28,6 +28,7 @@ void MazeSolver::begin() {
     pinMode(US_LEFT_ECHO, INPUT);
     pinMode(US_RIGHT_TRIG, OUTPUT); 
     pinMode(US_RIGHT_ECHO, INPUT);
+    
     // Configure IR sensors same as line follower
     const int irPins[NUM_SENSORS] = {IR1, IR2, IR3, IR4, IR5, IR6, IR7, IR8};
     for (int i = 0; i < NUM_SENSORS; i++) {
@@ -37,54 +38,59 @@ void MazeSolver::begin() {
     stopMotors();
 }
 
-// --- Main Algorithm Loop ---
 void MazeSolver::runStep() {
     // 1. Read Sensors & Update Walls
     updateWalls();
 
     // 2. Check if we reached target
-    // if(currX == TARGET_X && currY == TARGET_Y) {
-    //     stopMotors();
-    //     return; // DONE!
-    // }
+    if(currX == TARGET_X && currY == TARGET_Y) {
+        stopMotors();
+        return; // DONE!
+    }
 
     // 3. Recalculate Distances (Flood Fill)
-    // floodFill();
+    floodFill();
 
     // 4. Decide Best Move
     Direction nextDir = getBestDirection();
-    Serial.println("Before Turn Next Direction: " + String(nextDir));
 
-    Serial.println(walls[currX][currY], BIN);
+    Serial.println("====================================================================================");
+    Serial.println("Current Position (" + String(currX) + "," + String(currY) + ")");
+    Serial.println("current robot Direction - before turn: " + String(currDir));
+    Serial.println("current cell wall "+ String(walls[currX][currY], BIN));
 
     // 5. Execute Move
     turnTo(nextDir);
-    Serial.println("After Turn Moving from (" + String(currX) + "," + String(currY) + ") facing " + String(currDir));
     MET_FRONT_WALL = false;
     moveOneCell();
-    Serial.println("Current Position (" + String(currX) + "," + String(currY) + ")");
+   
+    Serial.println("Before Turn Next Direction: " + String(nextDir));
+    Serial.println("Move one cell");
     
     // 6. Update Virtual Coordinates
-    // if (MET_FRONT_WALL) {
-    //     Serial.println("MET FRONT WALL DURING MOVE, POSITION NOT UPDATED");
-    //     return;
-    // }
+    if (MET_FRONT_WALL) {
+        Serial.println("MET FRONT WALL DURING MOVE, POSITION NOT UPDATED");
+        return;
+    }
 
     if(currDir == NORTH) currY++;
     else if(currDir == EAST) currX++;
     else if(currDir == SOUTH) currY--;
     else if(currDir == WEST) currX--;
-    Serial.println("Next Position: (" + String(currX) + "," + String(currY) + ")");
-    Serial.println("=====================================================");
+
+    Serial.println("Next Position after move i cell: (" + String(currX) + "," + String(currY) + ")");
+    Serial.println("====================================================================================");
     Serial.println();
-    
-    // Small stop to stabilize before next reading
+
     stopMotors();
+    delay(500);
 }
 
 bool MazeSolver::isFinished() {
     // Finish if coordinates reach target or IR sees white target
-    if (currX == TARGET_X && currY == TARGET_Y) return true;
+    if (currX == TARGET_X && currY == TARGET_Y) {
+        return true;
+    }
     return isTargetDetectedIR();
 }
 
@@ -162,9 +168,13 @@ void MazeSolver::updateWalls() {
     bool wallLeft  = (l > 0 && l < 8);
     bool wallRight = (r > 0 && r < 8);
 
-    Serial.print("[IsFrontAvail] " + String(wallFront));
-    Serial.print("[IsLeftAvail] " + String(wallLeft));
-    Serial.println("[IsRightAvail] " + String(wallRight));
+    Serial1.println("#################################################################################");
+    Serial1.println();
+
+    Serial.print("IsFrontAvail -  " + String(wallFront));
+    Serial.print("IsLeftAvail -  " + String(wallLeft));
+    Serial.println("IsRightAvail -  " + String(wallRight));
+    Serial1.println();
 
     // Map Relative (Front/Left/Right) to Absolute (N/E/S/W)
     if(wallFront) {
@@ -200,40 +210,39 @@ Direction MazeSolver::getBestDirection() {
     float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
     float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
 
-    Serial.print("Sensor Readings - Front: " + String(f) + " cm, Left: " + String(l) + " cm, Right: " + String(r) + " cm\n");
+    // Serial.print("Sensor Readings - Front: " + String(f) + " cm, Left: " + String(l) + " cm, Right: " + String(r) + " cm\n");
 
     bool wallFront = (f > 0 && f < 10);
     bool wallLeft  = (l > 0 && l < 10);
     bool wallRight = (r > 0 && r < 10);
-    Serial.println("Wall Presence - Front: " + String(wallFront) + ", Left: " + String(wallLeft) + ", Right: " + String(wallRight));
+
+    // Serial.println("Wall Presence - Front: " + String(wallFront) + ", Left: " + String(wallLeft) + ", Right: " + String(wallRight));
 
     if(wallFront && wallLeft && wallRight) {
-        // Dead End - Turn Around
         bestDir = (Direction)((currDir + 2) % 4);
-        Serial.println("Dead End - Turning Around");
+        Serial.println("U - Turn");
+
     } else if(wallFront && wallRight && !wallLeft) {
-        // Left Turn Only
         Serial.println("Left Turn Only");
         bestDir = (Direction)((currDir + 3) % 4);
+
     } else if(wallFront && wallLeft && !wallRight) {
-        // Right Turn Only
         bestDir = (Direction)((currDir + 1) % 4);
         Serial.println("Right Turn Only");
+
     } else if(wallFront && !wallLeft && !wallRight) {
-        //T junction -  Both Left and Right Open - Choose Best Distance
             bestDir = (Direction)((currDir + 3) % 4); // Left
-            Serial.println("Both Left and Right Open - Choosing Left");
+            Serial.println("T junction - Choosing Left");
+
     } else if(!wallFront && wallRight && !wallLeft) {
-        // Left Open - Go Left
         bestDir = (Direction)((currDir + 3) % 4);
         Serial.println("Left Open - Going Left");
+
     } else if(!wallFront && wallLeft && !wallRight) {
-        // Right Open - Go Right
         bestDir = (Direction)((currDir + 1) % 4);
         Serial.println("Right Open - Going Right");
 
     }else {
-        // Front Open - Go Straight
         bestDir = currDir;
         Serial.println("Path Clear - Going Straight");
     }
@@ -315,33 +324,28 @@ void MazeSolver::reset() {
     stopMotors();
 }
 
-// --- Movement ---
+
 void MazeSolver::turnTo(Direction targetDir) {
     int diff = (targetDir - currDir);
         
     if (diff == 0) {
         // Straight - Do nothing
-        // Serial.println("straight");
+
     } else if (diff == 1 || diff == -3) {
         turnRight();
-        // Serial.println("right");
-        // while (true){};
+
     } else if (diff == -1 || diff == 3) {
         turnLeft();
-        // Serial.println("left");
-        // while (true){};
+  
     } else {
         turnAround();
-        // Serial.println("u turn");
-        // while (true){};
+
     }
     
     currDir = targetDir;
 }
 
 void MazeSolver::moveOneCell() {
-    // Move forward one cell (18cm) while following walls using PD control
-    // Using ultrasonic sensors on left and right to maintain distance
     
     encZero();
     leftMotor.setDirection(true);
@@ -358,14 +362,11 @@ void MazeSolver::moveOneCell() {
         long avg = (labs(encLeft()) + labs(encRight())) / 2;
         if(avg >= COUNTS_PER_CELL) break;
         
-        // --- Simple PD Wall Following ---
         float rightDist = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
         float leftDist = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
 
         bool rightWallExists = (rightDist > 0 && rightDist < WALL_THRESHOLD * 1.2);
         bool leftWallExists = (leftDist > 0 && leftDist < WALL_THRESHOLD * 1.2);
-
-    //    Serial.println("Left wall: " + String(leftWallExists) + " Right wall: " + String(rightWallExists) + "front dist: " + String(readSensor(US_FRONT_TRIG, US_FRONT_ECHO)));
 
         if(rightWallExists && leftWallExists) {
             error = leftDist - rightDist+1;
@@ -386,22 +387,20 @@ void MazeSolver::moveOneCell() {
         int leftSpeed = BASE_SPEED - correction;
         int rightSpeed = BASE_SPEED + correction;
 
-        // Clamp speeds to valid range
         leftSpeed = constrain(leftSpeed, 0, 200);
         rightSpeed = constrain(rightSpeed, 0, 200);
 
         leftMotor.setSpeed(leftSpeed);
         rightMotor.setSpeed(rightSpeed);
-        // --- End PD Wall Following ---
         
         // Safety: If too close to front wall, stop early
         float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
         if(frontDist > 0 && frontDist < 3.0) {
-            // MET_FRONT_WALL = true;
+            MET_FRONT_WALL = true;
             break;
         }
 
-        delay(10); // Loop delay for stability
+        delay(10); 
     }
     stopMotors();
 }
@@ -437,7 +436,6 @@ void MazeSolver::stopMotors() {
     rightMotor.setSpeed(0);
 }
 
-// --- Helpers ---
 float MazeSolver::readSensor(int trig, int echo) {
     digitalWrite(trig, LOW); delayMicroseconds(2);
     digitalWrite(trig, HIGH); delayMicroseconds(10);
