@@ -68,7 +68,7 @@ void MazeSolver::runStep()
     // 5. Execute Move
     turnTo(nextDir);
     moveOneCell();
-    delay(1000);
+    delay(200);
 
     Serial.println("Before Turn Next Direction: " + String(nextDir));
     Serial.println("Move one cell");
@@ -281,7 +281,7 @@ Direction MazeSolver::getBestDirection(){
 
     switch (wallConfig) {
         case 0b111:  // All walls (dead end)
-            // bestDir = (Direction)((currDir + 2) % 4);R4
+            bestDir = (Direction)((currDir + 2) % 4);
             Serial.println("Decision: DEAD END → U-Turn");
             break;
 
@@ -322,18 +322,18 @@ Direction MazeSolver::getBestDirection(){
             Serial.println("Decision: T-JUNCTION → Left (left-hand rule)");
             break;
 
-        default:  // Should never reach here, but safety fallback
-            if (!wallLeft) {
-                bestDir = (Direction)((currDir + 3) % 4);
-                Serial.println("Decision: FALLBACK → Left");
-            } else if (!wallRight) {
-                bestDir = (Direction)((currDir + 1) % 4);
-                Serial.println("Decision: FALLBACK → Right");
-            } else {
-                bestDir = (Direction)((currDir + 2) % 4);
-                Serial.println("Decision: FALLBACK → U-Turn");
-            }
-            break;
+        // default:  // Should never reach here, but safety fallback
+        //     if (!wallLeft) {
+        //         bestDir = (Direction)((currDir + 3) % 4);
+        //         Serial.println("Decision: FALLBACK → Left");
+        //     } else if (!wallRight) {
+        //         bestDir = (Direction)((currDir + 1) % 4);
+        //         Serial.println("Decision: FALLBACK → Right");
+        //     } else {
+        //         bestDir = (Direction)((currDir + 2) % 4);
+        //         Serial.println("Decision: FALLBACK → U-Turn");
+        //     }
+        //     break;
     }
     return bestDir;
 }
@@ -541,7 +541,7 @@ void MazeSolver::moveOneCell(){
 
         // Safety: If too close to front wall, stop early
         float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
-        if (frontDist > 0 && frontDist < 3.0) {
+        if (frontDist > 0 && frontDist < 3.50) {
             Serial.println("**************breaking...");
             break;
         }

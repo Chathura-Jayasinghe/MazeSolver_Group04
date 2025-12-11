@@ -13,12 +13,12 @@
 #define US_RIGHT_ECHO 36
 
 // --- Calibration Constants (TUNE THESE) ---
-#define BASE_SPEED      70
-#define TURN_SPEED      40
+#define BASE_SPEED      100
+#define TURN_SPEED      70
 #define WALL_THRESHOLD  15.0f
 #define COUNTS_PER_90   250L 
 #define COUNTS_PER_180  470L
-#define COUNTS_PER_CELL 525L   
+#define COUNTS_PER_CELL 515L   //525L
 
 // --- PD Wall Following constants ---
 const float KP = 2.2;
