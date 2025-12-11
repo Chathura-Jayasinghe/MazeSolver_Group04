@@ -15,14 +15,15 @@
 // --- Calibration Constants (TUNE THESE) ---
 #define BASE_SPEED      70
 #define TURN_SPEED      40
-#define WALL_THRESHOLD  15.0f  
-#define COUNTS_PER_90   240L
+#define WALL_THRESHOLD  15.0f
+#define COUNTS_PER_90   250L 
+#define COUNTS_PER_180  470L
 #define COUNTS_PER_CELL 525L   
 
 // --- PD Wall Following constants ---
 const float KP = 2.2;
 const float KD = 0.0; 
-const float DESIRED_WALL_DISTANCE = 5.5;
+const float DESIRED_WALL_DISTANCE = 7.5;
 
 
 // --- Maze Constants ---

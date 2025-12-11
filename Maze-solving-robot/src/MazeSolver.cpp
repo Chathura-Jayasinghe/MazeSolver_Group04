@@ -258,69 +258,83 @@ void MazeSolver::updateWalls()
     }
 }
 
-Direction MazeSolver::getBestDirection()
-{
+Direction MazeSolver::getBestDirection(){
     Direction bestDir = currDir;
 
     float f = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
     float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
     float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
 
-    bool wallFront = (f > 0 && f < WALL_THRESHOLD);  // Use consistent threshold
+    // Define distance thresholds
+    const float MIN_FORWARD_DISTANCE = 15.0;  // Minimum safe distance to move forward
+    
+    bool wallFront = (f > -2 && f < MIN_FORWARD_DISTANCE);
     bool wallLeft = (l > 0 && l < WALL_THRESHOLD);
     bool wallRight = (r > 0 && r < WALL_THRESHOLD);
 
     Serial.print("Sensors: F=" + String(f) + " L=" + String(l) + " R=" + String(r));
     Serial.println(" | Walls: F=" + String(wallFront) + " L=" + String(wallLeft) + " R=" + String(wallRight));
 
-    // PRIORITY 1: Dead end (all walls) → U-turn
-    if (wallFront && wallLeft && wallRight)
-    {
-        bestDir = (Direction)((currDir + 2) % 4);
-        Serial.println("Decision: DEAD END → U-Turn");
-    }
-    
-    // PRIORITY 2: Front blocked, only one side open → Forced turn
-    else if (wallFront && wallLeft && !wallRight)
-    {
-        bestDir = (Direction)((currDir + 1) % 4);
-        Serial.println("Decision: FORCED RIGHT (front & left blocked)");
-    }
-    else if (wallFront && !wallLeft && wallRight)
-    {
-        bestDir = (Direction)((currDir + 3) % 4);
-        Serial.println("Decision: FORCED LEFT (front & right blocked)");
-    }
-    
-    // PRIORITY 3: Front clear → Prefer straight (includes corridors and L-junctions)
-    else if (!wallFront)
-    {
-        bestDir = currDir;  // Keep going straight
-        
-        if (wallLeft && wallRight)
-            Serial.println("Decision: CORRIDOR → Straight");
-        else if (wallLeft)
-            Serial.println("Decision: L-JUNCTION (right open) → Straight");
-        else if (wallRight)
-            Serial.println("Decision: L-JUNCTION (left open) → Straight");
-        else
-            Serial.println("Decision: OPEN SPACE → Straight");
-    }
-    
-    // PRIORITY 4: Front blocked, both sides open → T-junction (arbitrary choice)
-    else if (wallFront && !wallLeft && !wallRight)
-    {
-        bestDir = (Direction)((currDir + 3) % 4);  // Choose left
-        Serial.println("Decision: T-JUNCTION → Left (left-hand rule)");
-    }
-    
-    // Fallback (should never reach here)
-    else
-    {
-        bestDir = currDir;
-        Serial.println("Decision: FALLBACK → Straight");
-    }
+    // Create a case value based on wall configuration (3-bit: FLR)
+    // Bit 2: Front wall, Bit 1: Left wall, Bit 0: Right wall
+    int wallConfig = (wallFront << 2) | (wallLeft << 1) | wallRight;
 
+    switch (wallConfig) {
+        case 0b111:  // All walls (dead end)
+            // bestDir = (Direction)((currDir + 2) % 4);R4
+            Serial.println("Decision: DEAD END → U-Turn");
+            break;
+
+        case 0b110:  // Front and left blocked, right open
+            bestDir = (Direction)((currDir + 1) % 4);
+            Serial.println("Decision: FORCED RIGHT (front & left blocked)");
+            break;
+
+        case 0b101:  // Front and right blocked, left open
+            bestDir = (Direction)((currDir + 3) % 4);
+            Serial.println("Decision: FORCED LEFT (front & right blocked)");
+            break;
+
+        case 0b011:  // Front clear, both sides blocked (corridor)
+            bestDir = currDir;
+            Serial.println("Decision: CORRIDOR → Straight");
+            break;
+
+        case 0b001:  // Front clear, left blocked, right open (L-junction)
+            bestDir = (Direction)((currDir + 3) % 4);  // LEFT has priority!
+
+            Serial.println("Decision: L-JUNCTION () → turn left");
+            break;
+
+        case 0b010:  // Front clear, left open, right blocked (L-junction)
+            bestDir = (Direction)((currDir + 1) % 4);
+            Serial.println("Decision: L-JUNCTION () → right ");
+            break;
+
+        case 0b000:  // All directions clear (open space or crossroads)
+            // LEFT-HAND RULE PRIORITY: Left > Straight > Right
+            bestDir = (Direction)((currDir + 3) % 4);  // Always turn left
+            Serial.println("Decision: CROSSROADS → Left (left-hand rule)");
+            break;
+
+        case 0b100:  // Front blocked, both sides open (T-junction)
+            bestDir = (Direction)((currDir + 3) % 4);  // Left-hand rule
+            Serial.println("Decision: T-JUNCTION → Left (left-hand rule)");
+            break;
+
+        default:  // Should never reach here, but safety fallback
+            if (!wallLeft) {
+                bestDir = (Direction)((currDir + 3) % 4);
+                Serial.println("Decision: FALLBACK → Left");
+            } else if (!wallRight) {
+                bestDir = (Direction)((currDir + 1) % 4);
+                Serial.println("Decision: FALLBACK → Right");
+            } else {
+                bestDir = (Direction)((currDir + 2) % 4);
+                Serial.println("Decision: FALLBACK → U-Turn");
+            }
+            break;
+    }
     return bestDir;
 }
 
@@ -445,14 +459,16 @@ void MazeSolver::turnTo(Direction targetDir)
 
     if (diff == 0)
     {
-        // Straight - Do nothing
+        Serial.println("// Straight - Do nothing");
     }
     else if (diff == 1 || diff == -3)
     {
+        Serial.println("!!!!!!turn right called");
         turnRight();
     }
     else if (diff == -1 || diff == 3)
     {
+        Serial.println("!!!!!!turn left called");
         turnLeft();
     }
     else
@@ -463,8 +479,8 @@ void MazeSolver::turnTo(Direction targetDir)
     currDir = targetDir;
 }
 
-void MazeSolver::moveOneCell()
-{
+void MazeSolver::moveOneCell(){
+    Serial.println("-----------move one cell--------------");
     encZero();
     leftMotor.setDirection(true);
     rightMotor.setDirection(true);
@@ -472,6 +488,12 @@ void MazeSolver::moveOneCell()
     float error = 0;
     float lastError = 0;
     float correction = 0;
+
+     float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
+        if (frontDist > 0 && frontDist < 5.0) {
+            Serial.println("**************breaking...");
+            return;
+        }
 
     leftMotor.setSpeed(BASE_SPEED);
     rightMotor.setSpeed(BASE_SPEED);
@@ -518,11 +540,11 @@ void MazeSolver::moveOneCell()
         rightMotor.setSpeed(rightSpeed);
 
         // Safety: If too close to front wall, stop early
-        // float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
-        // if (frontDist > 0 && frontDist < 3.0) {
-        //     Serial.println("**************breaking...");
-        //     break;
-        // }
+        float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
+        if (frontDist > 0 && frontDist < 3.0) {
+            Serial.println("**************breaking...");
+            break;
+        }
 
         delay(10);
     }
@@ -536,8 +558,7 @@ void MazeSolver::turnLeft()
     rightMotor.setDirection(true);
     leftMotor.setSpeed(TURN_SPEED);
     rightMotor.setSpeed(TURN_SPEED);
-    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_90)
-        ;
+    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_90);
     stopMotors();
 }
 
@@ -548,16 +569,22 @@ void MazeSolver::turnRight()
     rightMotor.setDirection(false);
     leftMotor.setSpeed(TURN_SPEED);
     rightMotor.setSpeed(TURN_SPEED);
-    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_90)
-        ;
+    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_90);
     stopMotors();
 }
 
 void MazeSolver::turnAround()
 {
-    turnRight();
-    delay(200);
-    turnRight();
+    // turnRight();
+    // delay(200);
+    // turnRight();
+     encZero();
+    leftMotor.setDirection(true);
+    rightMotor.setDirection(false);
+    leftMotor.setSpeed(TURN_SPEED);
+    rightMotor.setSpeed(TURN_SPEED);
+    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_180);
+    stopMotors();
 }
 
 void MazeSolver::stopMotors()
