@@ -240,9 +240,19 @@ void MazeSolver::updateWalls()
     //     walls[currX][currY - 1] |= WALL_NORTH;
     // if ((walls[currX][currY] & WALL_WEST) && currX > 0)
     //     walls[currX - 1][currY] |= WALL_EAST;
+
+    Serial.println("Full maze:");
+    for (int x = 0; x < MAZE_SIZE; x++) {
+        String row = "";
+        for (int y = 0; y < MAZE_SIZE; y++) {
+            row += String(walls[x][y], BIN) + " ";
+        }
+        Serial.println("row: " + row);
+    }
 }
 
-Direction MazeSolver::getBestDirection(){
+Direction MazeSolver::getBestDirection()
+{
     Direction bestDir = currDir;
 
     float f = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
@@ -250,8 +260,8 @@ Direction MazeSolver::getBestDirection(){
     float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
 
     // Define distance thresholds
-    const float MIN_FORWARD_DISTANCE = 15.0;  // Minimum safe distance to move forward
-    
+    const float MIN_FORWARD_DISTANCE = 15.0; // Minimum safe distance to move forward
+
     bool wallFront = (f > -2 && f < MIN_FORWARD_DISTANCE);
     bool wallLeft = (l > 0 && l < 12);
     bool wallRight = (r > 0 && r < 12);
@@ -262,35 +272,43 @@ Direction MazeSolver::getBestDirection(){
     switch (wallConfig) {
         
         case 0b110:  
-            bestDir = (Direction)((currDir + 1) % 4);
-            break;
+        bestDir = (Direction)((currDir + 1) % 4);
+        Serial.println("Decision: FORCED RIGHT (front & left blocked)");
+        break;
         
         case 0b101: 
-            bestDir = (Direction)((currDir + 3) % 4);
-            break;
+        bestDir = (Direction)((currDir + 3) % 4);
+        Serial.println("Decision: FORCED LEFT (front & right blocked)");
+        break;
         
         case 0b011:  
-            bestDir = currDir;
-            break;
+        bestDir = currDir;
+        Serial.println("Decision: CORRIDOR → Straight");
+        break;
         
         case 0b001:  
-            bestDir = (Direction)((currDir + 3) % 4);  
-            break;
+        bestDir = (Direction)((currDir + 3) % 4);  
+        Serial.println("Decision: L-T-JUNCTION () → turn left");
+        break;
         
         case 0b010: 
-            bestDir = (Direction)((currDir + 1) % 4);
-            break;
+        bestDir = (Direction)((currDir + 1) % 4);
+        Serial.println("Decision: L-JUNCTION () → right ");
+        break;
         
         case 0b111: 
             bestDir = (Direction)((currDir + 2) % 4);
+            Serial.println("Decision: DEAD END → U-Turn");
             break;
             
         case 0b000:  
             bestDir = (Direction)((currDir + 3) % 4); 
+            Serial.println("Decision: CROSSROADS → Left (left-hand rule)");
             break;
 
         case 0b100: 
             bestDir = (Direction)((currDir + 3) % 4); 
+            Serial.println("Decision: T-JUNCTION → Left (left-hand rule)");
             break;
 
         // default:  // Should never reach here, but safety fallback
@@ -402,7 +420,8 @@ void MazeSolver::followShortestPathStep()
     pathIndex++;
 }
 
-void MazeSolver::reset(){
+void MazeSolver::reset()
+{
     // Reset robot pose and map
     currX = 0;
     currY = 0;
@@ -420,7 +439,8 @@ void MazeSolver::reset(){
     stopMotors();
 }
 
-void MazeSolver::turnTo(Direction targetDir){
+void MazeSolver::turnTo(Direction targetDir)
+{
     int diff = (targetDir - currDir);
 
     if (diff == 0)
@@ -442,14 +462,14 @@ void MazeSolver::turnTo(Direction targetDir){
     currDir = targetDir;
 }
 
-void MazeSolver::moveOneCell(){
+void MazeSolver::moveOneCell() {
     encZero();
     leftMotor.setDirection(true);
     rightMotor.setDirection(true);
 
-    float error = 0;
-    float lastError = 0;
-    float correction = 0;
+    float error = 0.0f;
+    float lastError = 0.0f;
+    float correction = 0.0f;
 
     float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
     if (frontDist > 0 && frontDist < 5.0) {
@@ -530,7 +550,8 @@ void MazeSolver::turnRight()
     rightMotor.setDirection(false);
     leftMotor.setSpeed(TURN_SPEED);
     rightMotor.setSpeed(TURN_SPEED);
-    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_90);
+    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_90)
+        ;
     stopMotors();
 }
 
@@ -538,28 +559,30 @@ void MazeSolver::turnAround(){
     // turnRight();
     // delay(200);
     // turnRight();
-     encZero();
+    encZero();
     leftMotor.setDirection(true);
     rightMotor.setDirection(false);
     leftMotor.setSpeed(TURN_SPEED);
     rightMotor.setSpeed(TURN_SPEED);
-    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_180);
+    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_180)
+        ;
     stopMotors();
 }
 
-void MazeSolver::stopMotors(){
+void MazeSolver::stopMotors()
+{
     leftMotor.setSpeed(0);
     rightMotor.setSpeed(0);
 }
 
 float MazeSolver::readSensor(int trig, int echo)
-    {
-        digitalWrite(trig, LOW);
-        delayMicroseconds(5);
-        digitalWrite(trig, HIGH);
-        delayMicroseconds(10);
-        digitalWrite(trig, LOW);
-        long duration = pulseIn(echo, HIGH, 10000);
+{
+    digitalWrite(trig, LOW);
+    delayMicroseconds(5);
+    digitalWrite(trig, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trig, LOW);
+    long duration = pulseIn(echo, HIGH, 10000);
     if (duration == 0)
         return -1;
     return duration * 0.034 / 2;
@@ -567,7 +590,8 @@ float MazeSolver::readSensor(int trig, int echo)
 
 long MazeSolver::encLeft() { return leftMotor.getEncoderCount(); }
 long MazeSolver::encRight() { return rightMotor.getEncoderCount(); }
-void MazeSolver::encZero(){
+void MazeSolver::encZero()
+{
     leftMotor.resetEncoder();
     rightMotor.resetEncoder();
 }
