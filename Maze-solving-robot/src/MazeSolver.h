@@ -1,6 +1,7 @@
 #define MAZESOLVER_H
 
 #include <Arduino.h>
+#include <EEPROM.h>
 #include "MotorPID.h"
 #include "LineFollower.h" 
 
@@ -57,6 +58,11 @@ public:
     void reset();
     void computeShortestPath();
     void followShortestPathStep();
+    
+    // EEPROM Functions
+    void saveMazeToEEPROM();
+    void loadMazeFromEEPROM();
+    void printSavedMaze();
 
 private:
     MotorPID& leftMotor;

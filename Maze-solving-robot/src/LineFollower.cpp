@@ -87,7 +87,6 @@ void LineFollower::update() {
     switch (turnState) {
         case NORMAL_FOLLOWING: {
             if (sumVal == 0) {
-                Serial.println("Line lost - starting L-turn search");
                 turnState = SEARCHING_LEFT;
                 return;
             }
@@ -115,12 +114,9 @@ void LineFollower::update() {
         }
 
         case SEARCHING_LEFT: {
-            Serial.println("Searching left...");
             if (searchForLine(true)) {
-                Serial.println("Found line on the left!");
                 turnState = NORMAL_FOLLOWING;
             } else {
-                Serial.println("Line not found on left, trying right...");
                 turnState = SEARCHING_RIGHT;
                 searchForLine(false);
                 delay(100);
@@ -129,12 +125,9 @@ void LineFollower::update() {
         }
 
         case SEARCHING_RIGHT: {
-            Serial.println("Searching right...");
             if (searchForLine(false)) {
-                Serial.println("Found line on the right!");
                 turnState = NORMAL_FOLLOWING;
             } else {
-                Serial.println("Line not found in either direction - stopping");
                 stopMotors();
                 delay(1000);
                 turnState = NORMAL_FOLLOWING;
