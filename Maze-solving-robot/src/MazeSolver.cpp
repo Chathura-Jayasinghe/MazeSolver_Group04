@@ -1,5 +1,11 @@
 #include "MazeSolver.h"
 
+// EEPROM Memory Layout Constants
+#define EEPROM_START_ADDR 0
+#define EEPROM_VISITED_ADDR 64
+#define EEPROM_MAGIC_ADDR 131
+#define EEPROM_MAGIC_VALUE 0xAA
+
 MazeSolver::MazeSolver(MotorPID &left, MotorPID &right)
     : leftMotor(left), rightMotor(right)
 {
@@ -16,8 +22,12 @@ MazeSolver::MazeSolver(MotorPID &left, MotorPID &right)
         {
             walls[x][y] = 0;
             dist[x][y] = 255;
+            visited[x][y] = 0;  // Not visited yet
         }
     }
+    
+    // Mark starting position with its coordinates (0,0 = 00)
+    visited[0][0] = (0 * 10) + 0;
 
     pathLen = 0;
     pathIndex = 0;
@@ -88,6 +98,9 @@ void MazeSolver::runStep()
         currY--;
     else if (currDir == WEST)
         currX--;
+    
+    // Store position coordinates (e.g., X=5, Y=6 -> 56)
+    visited[currX][currY] = (currX * 10) + currY;
 
     stopMotors();
     delay(1000);
@@ -432,10 +445,22 @@ void MazeSolver::reset()
         {
             walls[x][y] = 0;
             dist[x][y] = 255;
+            visited[x][y] = 0;
         }
     }
+    visited[0][0] = (0 * 10) + 0;  // Mark starting position
     pathLen = 0;
     pathIndex = 0;
+    
+    // Clear EEPROM by invalidating magic byte
+    EEPROM.write(EEPROM_MAGIC_ADDR, 0x00);
+    
+    // Optionally clear all EEPROM data
+    for (int addr = 0; addr < 132; addr++) {
+        EEPROM.write(addr, 0);
+    }
+    
+    Serial.println("EEPROM cleared and system reset!");
     stopMotors();
 }
 
@@ -599,14 +624,11 @@ void MazeSolver::encZero()
 // ==================== EEPROM Functions ====================
 // EEPROM Memory Layout:
 // Address 0-63: walls[8][8] array (64 bytes)
-// Address 64: currX (1 byte)
-// Address 65: currY (1 byte)
-// Address 66: currDir (1 byte)
-// Address 67: magic byte (0xAA = valid data saved)
-
-#define EEPROM_START_ADDR 0
-#define EEPROM_MAGIC_ADDR 67
-#define EEPROM_MAGIC_VALUE 0xAA
+// Address 64-127: visited[8][8] array (64 bytes)
+// Address 128: currX (1 byte)
+// Address 129: currY (1 byte)
+// Address 130: currDir (1 byte)
+// Address 131: magic byte (0xAA = valid data saved)
 
 void MazeSolver::saveMazeToEEPROM() {
     Serial.println("\n=== Saving Maze to EEPROM ===");
@@ -619,10 +641,18 @@ void MazeSolver::saveMazeToEEPROM() {
         }
     }
     
+    // Save visited array (64 bytes)
+    addr = EEPROM_VISITED_ADDR;
+    for (int x = 0; x < MAZE_SIZE; x++) {
+        for (int y = 0; y < MAZE_SIZE; y++) {
+            EEPROM.write(addr++, visited[x][y]);
+        }
+    }
+    
     // Save robot position and direction
-    EEPROM.write(64, currX);
-    EEPROM.write(65, currY);
-    EEPROM.write(66, currDir);
+    EEPROM.write(128, currX);
+    EEPROM.write(129, currY);
+    EEPROM.write(130, currDir);
     
     // Write magic byte to indicate valid data
     EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC_VALUE);
@@ -648,10 +678,18 @@ void MazeSolver::loadMazeFromEEPROM() {
         }
     }
     
+    // Load visited array
+    addr = EEPROM_VISITED_ADDR;
+    for (int x = 0; x < MAZE_SIZE; x++) {
+        for (int y = 0; y < MAZE_SIZE; y++) {
+            visited[x][y] = EEPROM.read(addr++);
+        }
+    }
+    
     // Load robot position and direction
-    currX = EEPROM.read(64);
-    currY = EEPROM.read(65);
-    currDir = (Direction)EEPROM.read(66);
+    currX = EEPROM.read(128);
+    currY = EEPROM.read(129);
+    currDir = (Direction)EEPROM.read(130);
     
     Serial.println("Maze loaded successfully!");
     Serial.println("Final Position: X=" + String(currX) + " Y=" + String(currY) + " Dir=" + String(currDir));
@@ -669,9 +707,9 @@ void MazeSolver::printSavedMaze() {
     Serial.println("╚════════════════════════════════════════╝\n");
     
     // Print final robot position
-    byte savedX = EEPROM.read(64);
-    byte savedY = EEPROM.read(65);
-    byte savedDir = EEPROM.read(66);
+    byte savedX = EEPROM.read(128);
+    byte savedY = EEPROM.read(129);
+    byte savedDir = EEPROM.read(130);
     
     Serial.println("Robot Final Position:");
     Serial.println("  X: " + String(savedX) + " | Y: " + String(savedY));
@@ -737,6 +775,39 @@ void MazeSolver::printSavedMaze() {
         }
         Serial.println();
     }
+    
+    Serial.println("\n────────────────────────────────────────");
+    Serial.println("Robot Path (Visited Positions):\n");
+    
+    // Print visited positions grid
+    Serial.print("    ");
+    for (int y = 0; y < MAZE_SIZE; y++) {
+        Serial.print("Y" + String(y) + " ");
+    }
+    Serial.println();
+    
+    for (int x = 0; x < MAZE_SIZE; x++) {
+        Serial.print("X" + String(x) + "  ");
+        for (int y = 0; y < MAZE_SIZE; y++) {
+            int addr = EEPROM_VISITED_ADDR + (x * MAZE_SIZE) + y;
+            byte posValue = EEPROM.read(addr);
+            
+            if (posValue > 0) {
+                // Display the stored position value (e.g., 56 for X=5, Y=6)
+                if (posValue < 10) {
+                    Serial.print(" " + String(posValue) + " ");
+                } else {
+                    Serial.print(String(posValue) + " ");
+                }
+            } else {
+                Serial.print(" - ");  // Not visited
+            }
+        }
+        Serial.println();
+    }
+    
+    Serial.println("\nNote: Each cell shows its position (XY format, e.g., 56 = X5,Y6)");
+    Serial.println("      '-' means the cell was not visited");
     
     Serial.println("\n╔════════════════════════════════════════╗");
     Serial.println("║            END OF MAZE MAP             ║");

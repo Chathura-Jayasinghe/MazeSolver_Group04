@@ -76,6 +76,7 @@ private:
     // The Map
     byte walls[MAZE_SIZE][MAZE_SIZE];
     int  dist[MAZE_SIZE][MAZE_SIZE];
+    byte visited[MAZE_SIZE][MAZE_SIZE];  // Track visited positions
 
     // Shortest path storage
     Direction path[MAZE_SIZE * MAZE_SIZE];
