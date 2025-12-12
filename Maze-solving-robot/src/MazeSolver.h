@@ -13,7 +13,7 @@
 #define US_RIGHT_ECHO 36
 
 // --- Calibration Constants (TUNE THESE) ---
-#define BASE_SPEED      100
+#define BASE_SPEED      60
 #define TURN_SPEED      70
 #define WALL_THRESHOLD  15.0f
 #define COUNTS_PER_90   250L 
