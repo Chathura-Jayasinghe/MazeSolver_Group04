@@ -3,8 +3,9 @@
 
 #include <Arduino.h>
 #include "MotorPID.h"
+#include "LineFollower.h" // reuse IR sensor pin definitions
 
-// Ultrasonic sensor pins
+// --- Hardware Pins ---
 #define US_FRONT_TRIG 22
 #define US_FRONT_ECHO 24
 #define US_LEFT_TRIG 26
@@ -12,109 +13,89 @@
 #define US_RIGHT_TRIG 37
 #define US_RIGHT_ECHO 36
 
-// Control parameters
-#define OBSTACLE_DISTANCE 8
-#define BASE_SPEED 80
-#define MAX_CORRECTION 40
-#define ALIGNMENT_THRESHOLD 1.0
+// IR pins and NUM_SENSORS come from LineFollower.h (IR1..IR8)
 
-// Maze thresholds
-#define FRONT_STOP_CM   OBSTACLE_DISTANCE
-#define SIDE_OPEN_CM    15
-#define SIDE_WALL_CM    15
+// --- Calibration Constants (TUNE THESE) ---
+#define BASE_SPEED      50
+#define TURN_SPEED      40
+#define WALL_THRESHOLD  15.0f   // cm (If sensor reads < 15, it's a wall)
+#define COUNTS_PER_90   230L    // Encoder counts for 90 deg turn
+#define COUNTS_PER_CELL 550L    // Encoder counts for 18cm (1 cell) - MEASURE THIS!
 
-// Turn parameters
-#define COUNTS_PER_360  444L               
-#define COUNTS_PER_90   270L //250 - CORRECT FOR YOUR ROBOT
-#define TURN_SPEED    100 
+// --- PD Wall Following constants ---
+const float KP = 2.2; // Proportional gain (tune this)
+const float KD = 0.0; // Derivative gain (tune this)
+const float DESIRED_WALL_DISTANCE = 5.5; // Desired distance from wall in cm (tune this)
 
-struct RangeReadings {
-    float front_cm = -1.0f;
-    float left_cm  = -1.0f;
-    float right_cm = -1.0f;
+
+// --- Maze Constants ---
+#define MAZE_SIZE 9
+#define TARGET_X  4
+#define TARGET_Y  4
+
+// --- Direction Enums (Clockwise) ---
+enum Direction {
+    NORTH = 0,
+    EAST  = 1,
+    SOUTH = 2,
+    WEST  = 3
 };
 
-enum RobotState {
-    MOVING_FORWARD,
-    STOPPED,
-};
-
-enum JunctionType {
-    JT_STRAIGHT,
-    JT_L_LEFT,
-    JT_L_RIGHT,
-    JT_T,
-    JT_CROSS_OR_CORNER,
-    JT_DEAD_END
-};
-
-enum Decision {
-    DEC_LEFT,
-    DEC_STRAIGHT,
-    DEC_RIGHT,
-    DEC_UTURN,
-    DEC_NONE
-};
+// --- Wall Bitmasks ---
+#define WALL_NORTH (1 << NORTH)
+#define WALL_EAST  (1 << EAST)
+#define WALL_SOUTH (1 << SOUTH)
+#define WALL_WEST  (1 << WEST)
 
 class MazeSolver {
 public:
-    MazeSolver(MotorPID& leftMotor, MotorPID& rightMotor);
+    MazeSolver(MotorPID& left, MotorPID& right);
     void begin();
-    void setIRPins(const int* pins, int count);  // Set IR sensor pins from external source
-    bool update();  // Returns true if all IR sensors detect white
-    RobotState getCurrentState() { return currentState; }
-    void setCurrentState(RobotState state) { currentState = state; }
-    void forwardForMs(int pwmBase, long targetPulses);
-     void moveForwardWithWallFollowing();
-     //void readSensors();
-
+    
+    // Main loop function
+    void runStep(); 
+    bool isFinished(); // Returns true if target reached
+    bool isTargetDetectedIR();
+    void reset();
+    void computeShortestPath();
+    void followShortestPathStep();
 
 private:
     MotorPID& leftMotor;
     MotorPID& rightMotor;
-    
-    RangeReadings ranges;
-    RobotState currentState;
-    
-    // IR sensor pins (shared with LineFollower)
-    const int* irPins;
-    int irPinCount;
-    
-    // PD controller variables
-    float lastError;
-    unsigned long lastUpdateTime;
-    const float TARGET_DIST_CM     = 6.0f;
-    const float MAX_DETECT_DIST    = 80.0f;
-    const float MIN_VALID_DIST     = 5.0f;
-    const float Kp                 = 3.0f;
-    const float Kd                 = 0.0f;
 
-    // Helper functions
-    float ultrasonic_sensor_distance(int trigPin, int echoPin);
-    void readSensors();
-    bool allWhiteDetected();  // Check if all IR sensors detect white
-    bool sideIsOpen(float d);
+    // Robot State
+    int currX, currY;
+    Direction currDir;
+    
+    // The Map
+    byte walls[MAZE_SIZE][MAZE_SIZE];
+    int  dist[MAZE_SIZE][MAZE_SIZE];
+
+    // Shortest path storage
+    Direction path[MAZE_SIZE * MAZE_SIZE];
+    int pathLen;
+    int pathIndex;
+
+    // Helper Functions
+    float readSensor(int trig, int echo);
+    void  updateWalls();
+    void  floodFill();
+    Direction getBestDirection();
+    Direction getBestDirectionAt(int x, int y);
+    
+    // Movement Primitives
+    void turnTo(Direction targetDir);
+    void moveOneCell();
+    void turnLeft();
+    void turnRight();
+    void turnAround();
+    void stopMotors();
+    
+    // Encoders
     long encLeft();
     long encRight();
-    void encZeroBoth();
-    
-    // Movement functions
-    void calculateWallFollowingSpeeds(int &leftSpeed, int &rightSpeed);
-    // void moveForwardWithWallFollowing();
-    void moveForward();
-    void stopMotors();
-    void brakeShort();
-    void correctionRotate();
-    void Turn90(int dir);
-    void rotateLeft90();
-    void rotateRight90();
-    void reverseMotors(int duration_ms);
-    void rotateUTurn();
-    
-    // Decision making
-    JunctionType classifyJunction(const RangeReadings& r);
-    Decision decideAction(JunctionType jt);
-    void executeDecision(Decision d);
+    void encZero();
 };
 
-#endif // MAZESOLVER_H
+#endif
