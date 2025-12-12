@@ -16,7 +16,11 @@
 #define BASE_SPEED      70
 #define TURN_SPEED      40
 #define WALL_THRESHOLD  15.0f  
+<<<<<<< HEAD
 #define COUNTS_PER_90   240L    //230L thibuneeee
+=======
+#define COUNTS_PER_90   240L
+>>>>>>> c68fb1f4a44033cd06149dc3ba9ceb391ec4d4e3
 #define COUNTS_PER_CELL 525L   
 
 // --- PD Wall Following constants ---
