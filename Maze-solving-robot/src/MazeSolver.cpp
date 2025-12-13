@@ -543,7 +543,7 @@ void MazeSolver::moveOneCell() {
 
         correction = KP * error + KD * (error - lastError);
         lastError = error;
-
+        correction = constrain(correction, -30, 30);
         int leftSpeed = BASE_SPEED - correction;
         int rightSpeed = BASE_SPEED + correction;
 

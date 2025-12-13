@@ -28,7 +28,7 @@ const float DESIRED_WALL_DISTANCE = 7.5;
 
 // --- Maze Constants ---
 #define MAZE_SIZE 8
-#define TARGET_X  1
+#define TARGET_X  4
 #define TARGET_Y  4
 
 // --- Direction Enums (Clockwise) ---
@@ -62,7 +62,8 @@ public:
     void saveMazeToEEPROM();
     void loadMazeFromEEPROM();
     void printSavedMaze();
-
+    void stopMotors();
+    
 private:
     MotorPID& leftMotor;
     MotorPID& rightMotor;
@@ -95,7 +96,7 @@ private:
     void turnLeft();
     void turnRight();
     void turnAround();
-    void stopMotors();
+   
     
     // Encoders
     long encLeft();
