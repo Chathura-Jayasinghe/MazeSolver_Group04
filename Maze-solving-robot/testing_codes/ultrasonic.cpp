@@ -2,8 +2,8 @@
 
 // === Pin Configuration ===
 // Front sensor
-#define FRONT_TRIG 33
-#define FRONT_ECHO 32
+#define FRONT_TRIG 22
+#define FRONT_ECHO 24
 
 // Left sensor (angled ~45°)
 #define LEFT_TRIG 26
@@ -33,7 +33,7 @@ float readDistanceCM(int trigPin, int echoPin)
 
 void setup()
 {
-    Serial.begin(115200);
+    Serial.begin(9600);
 
     pinMode(FRONT_TRIG, OUTPUT);
     pinMode(FRONT_ECHO, INPUT);
