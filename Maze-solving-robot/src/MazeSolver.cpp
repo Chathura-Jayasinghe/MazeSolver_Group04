@@ -1,9 +1,16 @@
 #include "MazeSolver.h"
+#include <EEPROM.h>
 
 // EEPROM Memory Layout Constants
+// With 9x9 arrays (81 bytes each):
+// Walls:   0-80    (81 bytes)
+// Visited: 81-161  (81 bytes)
+// Robot position: 162-164 (3 bytes: X, Y, Dir)
+// Magic byte: 165
 #define EEPROM_START_ADDR 0
-#define EEPROM_VISITED_ADDR 64
-#define EEPROM_MAGIC_ADDR 131
+#define EEPROM_VISITED_ADDR 81
+#define EEPROM_ROBOT_POS_ADDR 162
+#define EEPROM_MAGIC_ADDR 165
 #define EEPROM_MAGIC_VALUE 0xAA
 
 MazeSolver::MazeSolver(MotorPID &left, MotorPID &right)
@@ -16,9 +23,9 @@ MazeSolver::MazeSolver(MotorPID &left, MotorPID &right)
     currDir = NORTH;
 
     // Initialize Map: No walls (0), Unknown distance (255)
-    for (int x = 0; x < MAZE_SIZE; x++)
+    for (int x = 0; x <= MAZE_SIZE; x++)
     {
-        for (int y = 0; y < MAZE_SIZE; y++)
+        for (int y = 0; y <= MAZE_SIZE; y++)
         {
             walls[x][y] = 0;
             dist[x][y] = 255;
@@ -58,9 +65,9 @@ void MazeSolver::runStep()
     saveMazeToEEPROM();
 
     Serial.println("Full maze:");
-    for (int x = 0; x < MAZE_SIZE; x++) {
+    for (int x = 0; x <= MAZE_SIZE; x++) {
         String row = "";
-        for (int y = 0; y < MAZE_SIZE; y++) {
+        for (int y = 0; y <= MAZE_SIZE; y++) {
             row += String(walls[x][y], BIN) + " ";
         }
         Serial.println("row: " + row);
@@ -134,9 +141,9 @@ bool MazeSolver::isTargetDetectedIR()
 void MazeSolver::floodFill()
 {
     // Reset distances
-    for (int x = 0; x < MAZE_SIZE; x++)
+    for (int x = 0; x <= MAZE_SIZE; x++)
     {
-        for (int y = 0; y < MAZE_SIZE; y++)
+        for (int y = 0; y <= MAZE_SIZE; y++)
         {
             dist[x][y] = 255;
         }
@@ -160,7 +167,7 @@ void MazeSolver::floodFill()
         int d = dist[p.x][p.y];
 
         // Check North Neighbor (x, y+1)
-        if (p.y < MAZE_SIZE - 1 && !(walls[p.x][p.y] & WALL_NORTH))
+        if (p.y <= MAZE_SIZE - 1 && !(walls[p.x][p.y] & WALL_NORTH))
         {
             if (dist[p.x][p.y + 1] == 255)
             {
@@ -169,7 +176,7 @@ void MazeSolver::floodFill()
             }
         }
         // Check East Neighbor (x+1, y)
-        if (p.x < MAZE_SIZE - 1 && !(walls[p.x][p.y] & WALL_EAST))
+        if (p.x <= MAZE_SIZE - 1 && !(walls[p.x][p.y] & WALL_EAST))
         {
             if (dist[p.x + 1][p.y] == 255)
             {
@@ -245,9 +252,9 @@ void MazeSolver::updateWalls()
     }
 
     // // Sync neighbors (If I have North wall, neighbor above has South wall)
-    // if ((walls[currX][currY] & WALL_NORTH) && currY < MAZE_SIZE - 1)
+    // if ((walls[currX][currY] & WALL_NORTH) && currY <= MAZE_SIZE - 1)
     //     walls[currX][currY + 1] |= WALL_SOUTH;
-    // if ((walls[currX][currY] & WALL_EAST) && currX < MAZE_SIZE - 1)
+    // if ((walls[currX][currY] & WALL_EAST) && currX <= MAZE_SIZE - 1)
     //     walls[currX + 1][currY] |= WALL_WEST;
     // if ((walls[currX][currY] & WALL_SOUTH) && currY > 0)
     //     walls[currX][currY - 1] |= WALL_NORTH;
@@ -255,9 +262,9 @@ void MazeSolver::updateWalls()
     //     walls[currX - 1][currY] |= WALL_EAST;
 
     Serial.println("Full maze:");
-    for (int x = 0; x < MAZE_SIZE; x++) {
+    for (int x = 0; x <= MAZE_SIZE; x++) {
         String row = "";
-        for (int y = 0; y < MAZE_SIZE; y++) {
+        for (int y = 0; y <= MAZE_SIZE; y++) {
             row += String(walls[x][y], BIN) + " ";
         }
         Serial.println("row: " + row);
@@ -342,7 +349,7 @@ Direction MazeSolver::getBestDirectionAt(int x, int y)
     int minDist = 255;
     Direction bestDir = NORTH;
 
-    if (y < MAZE_SIZE - 1 && !(walls[x][y] & WALL_NORTH))
+    if (y <= MAZE_SIZE - 1 && !(walls[x][y] & WALL_NORTH))
     {
         if (dist[x][y + 1] < minDist)
         {
@@ -350,7 +357,7 @@ Direction MazeSolver::getBestDirectionAt(int x, int y)
             bestDir = NORTH;
         }
     }
-    if (x < MAZE_SIZE - 1 && !(walls[x][y] & WALL_EAST))
+    if (x <= MAZE_SIZE - 1 && !(walls[x][y] & WALL_EAST))
     {
         if (dist[x + 1][y] < minDist)
         {
@@ -393,7 +400,7 @@ void MazeSolver::computeShortestPath()
         return;
 
     // Limit steps to grid size to avoid infinite loops
-    for (int steps = 0; steps < MAZE_SIZE * MAZE_SIZE; steps++)
+    for (int steps = 0; steps <= MAZE_SIZE * MAZE_SIZE; steps++)
     {
         if (x == TARGET_X && y == TARGET_Y)
             break;
@@ -439,9 +446,9 @@ void MazeSolver::reset()
     currX = 0;
     currY = 0;
     currDir = NORTH;
-    for (int x = 0; x < MAZE_SIZE; x++)
+    for (int x = 0; x <= MAZE_SIZE; x++)
     {
-        for (int y = 0; y < MAZE_SIZE; y++)
+        for (int y = 0; y <= MAZE_SIZE; y++)
         {
             walls[x][y] = 0;
             dist[x][y] = 255;
@@ -635,24 +642,24 @@ void MazeSolver::saveMazeToEEPROM() {
     
     // Save walls array (64 bytes)
     int addr = EEPROM_START_ADDR;
-    for (int x = 0; x < MAZE_SIZE; x++) {
-        for (int y = 0; y < MAZE_SIZE; y++) {
+    for (int x = 0; x <= MAZE_SIZE; x++) {
+        for (int y = 0; y <= MAZE_SIZE; y++) {
             EEPROM.write(addr++, walls[x][y]);
         }
     }
     
     // Save visited array (64 bytes)
     addr = EEPROM_VISITED_ADDR;
-    for (int x = 0; x < MAZE_SIZE; x++) {
-        for (int y = 0; y < MAZE_SIZE; y++) {
+    for (int x = 0; x <= MAZE_SIZE; x++) {
+        for (int y = 0; y <= MAZE_SIZE; y++) {
             EEPROM.write(addr++, visited[x][y]);
         }
     }
     
     // Save robot position and direction
-    EEPROM.write(128, currX);
-    EEPROM.write(129, currY);
-    EEPROM.write(130, currDir);
+    EEPROM.write(EEPROM_ROBOT_POS_ADDR, currX);
+    EEPROM.write(EEPROM_ROBOT_POS_ADDR + 1, currY);
+    EEPROM.write(EEPROM_ROBOT_POS_ADDR + 2, currDir);
     
     // Write magic byte to indicate valid data
     EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC_VALUE);
@@ -672,24 +679,24 @@ void MazeSolver::loadMazeFromEEPROM() {
     
     // Load walls array
     int addr = EEPROM_START_ADDR;
-    for (int x = 0; x < MAZE_SIZE; x++) {
-        for (int y = 0; y < MAZE_SIZE; y++) {
+    for (int x = 0; x <= MAZE_SIZE; x++) {
+        for (int y = 0; y <= MAZE_SIZE; y++) {
             walls[x][y] = EEPROM.read(addr++);
         }
     }
     
     // Load visited array
     addr = EEPROM_VISITED_ADDR;
-    for (int x = 0; x < MAZE_SIZE; x++) {
-        for (int y = 0; y < MAZE_SIZE; y++) {
+    for (int x = 0; x <= MAZE_SIZE; x++) {
+        for (int y = 0; y <=    MAZE_SIZE; y++) {
             visited[x][y] = EEPROM.read(addr++);
         }
     }
     
     // Load robot position and direction
-    currX = EEPROM.read(128);
-    currY = EEPROM.read(129);
-    currDir = (Direction)EEPROM.read(130);
+    currX = EEPROM.read(EEPROM_ROBOT_POS_ADDR);
+    currY = EEPROM.read(EEPROM_ROBOT_POS_ADDR + 1);
+    currDir = (Direction)EEPROM.read(EEPROM_ROBOT_POS_ADDR + 2);
     
     Serial.println("Maze loaded successfully!");
     Serial.println("Final Position: X=" + String(currX) + " Y=" + String(currY) + " Dir=" + String(currDir));
@@ -707,9 +714,9 @@ void MazeSolver::printSavedMaze() {
     Serial.println("╚════════════════════════════════════════╝\n");
     
     // Print final robot position
-    byte savedX = EEPROM.read(128);
-    byte savedY = EEPROM.read(129);
-    byte savedDir = EEPROM.read(130);
+    byte savedX = EEPROM.read(EEPROM_ROBOT_POS_ADDR);
+    byte savedY = EEPROM.read(EEPROM_ROBOT_POS_ADDR + 1);
+    byte savedDir = EEPROM.read(EEPROM_ROBOT_POS_ADDR + 2);
     
     Serial.println("Robot Final Position:");
     Serial.println("  X: " + String(savedX) + " | Y: " + String(savedY));
@@ -721,17 +728,17 @@ void MazeSolver::printSavedMaze() {
     
     // Print column headers
     Serial.print("    ");
-    for (int y = 0; y < MAZE_SIZE; y++) {
+    for (int y = 0; y <= MAZE_SIZE; y++) {
         Serial.print("Y" + String(y) + "   ");
     }
     Serial.println();
     
     // Print maze row by row
-    for (int x = 0; x < MAZE_SIZE; x++) {
+    for (int x = 0; x <= MAZE_SIZE; x++) {
         Serial.print("X" + String(x) + " ");
         
-        for (int y = 0; y < MAZE_SIZE; y++) {
-            int addr = EEPROM_START_ADDR + (x * MAZE_SIZE) + y;
+        for (int y = 0; y <= MAZE_SIZE; y++) {
+            int addr = EEPROM_START_ADDR + (x * (MAZE_SIZE+1)) + y;
             byte wallByte = EEPROM.read(addr);
             
             // Build wall string (show which walls exist)
@@ -755,15 +762,15 @@ void MazeSolver::printSavedMaze() {
     
     // Print binary representation
     Serial.print("    ");
-    for (int y = 0; y < MAZE_SIZE; y++) {
+    for (int y = 0; y <=MAZE_SIZE; y++) {
         Serial.print("  Y" + String(y) + "  ");
     }
     Serial.println();
     
-    for (int x = 0; x < MAZE_SIZE; x++) {
+    for (int x = 0; x <= MAZE_SIZE; x++) {
         Serial.print("X" + String(x) + " ");
-        for (int y = 0; y < MAZE_SIZE; y++) {
-            int addr = EEPROM_START_ADDR + (x * MAZE_SIZE) + y;
+        for (int y = 0; y <= MAZE_SIZE; y++) {
+            int addr = EEPROM_START_ADDR + (x * (MAZE_SIZE+1)) + y;
             byte wallByte = EEPROM.read(addr);
             
             // Print as 4-bit binary
@@ -781,15 +788,15 @@ void MazeSolver::printSavedMaze() {
     
     // Print visited positions grid
     Serial.print("    ");
-    for (int y = 0; y < MAZE_SIZE; y++) {
+    for (int y = 0; y <= MAZE_SIZE; y++) {
         Serial.print("Y" + String(y) + " ");
     }
     Serial.println();
     
-    for (int x = 0; x < MAZE_SIZE; x++) {
+    for (int x = 0; x <= MAZE_SIZE; x++) {
         Serial.print("X" + String(x) + "  ");
-        for (int y = 0; y < MAZE_SIZE; y++) {
-            int addr = EEPROM_VISITED_ADDR + (x * MAZE_SIZE) + y;
+        for (int y = 0; y <= MAZE_SIZE; y++) {
+            int addr = EEPROM_VISITED_ADDR + (x * (MAZE_SIZE+1)) + y;
             byte posValue = EEPROM.read(addr);
             
             if (posValue > 0) {

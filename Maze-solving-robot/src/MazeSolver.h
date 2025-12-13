@@ -1,7 +1,6 @@
 #define MAZESOLVER_H
 
 #include <Arduino.h>
-#include <EEPROM.h>
 #include "MotorPID.h"
 #include "LineFollower.h" 
 
@@ -74,9 +73,9 @@ private:
     bool MET_FRONT_WALL;
     
     // The Map
-    byte walls[MAZE_SIZE][MAZE_SIZE];
-    int  dist[MAZE_SIZE][MAZE_SIZE];
-    byte visited[MAZE_SIZE][MAZE_SIZE];  // Track visited positions
+    byte walls[MAZE_SIZE+1][MAZE_SIZE+1];
+    int  dist[MAZE_SIZE+1][MAZE_SIZE+1];
+    byte visited[MAZE_SIZE+1][MAZE_SIZE+1];  // Track visited positions
 
     // Shortest path storage
     Direction path[MAZE_SIZE * MAZE_SIZE];
