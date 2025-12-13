@@ -28,8 +28,8 @@ const float DESIRED_WALL_DISTANCE = 7.5;
 
 // --- Maze Constants ---
 #define MAZE_SIZE 8
-#define TARGET_X  1
-#define TARGET_Y  4
+#define TARGET_X  8
+#define TARGET_Y  8
 
 // --- Direction Enums (Clockwise) ---
 enum Direction {

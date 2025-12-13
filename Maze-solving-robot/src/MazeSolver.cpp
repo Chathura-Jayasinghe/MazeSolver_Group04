@@ -273,75 +273,135 @@ void MazeSolver::updateWalls()
 
 Direction MazeSolver::getBestDirection()
 {
-    Direction bestDir = currDir;
-
-    float f = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
-    float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
-    float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
-
-    // Define distance thresholds
-    const float MIN_FORWARD_DISTANCE = 15.0; // Minimum safe distance to move forward
-
-    bool wallFront = (f > -2 && f < MIN_FORWARD_DISTANCE);
-    bool wallLeft = (l > 0 && l < 12);
-    bool wallRight = (r > 0 && r < 12);
-
-    // Bit 2: Front wall, Bit 1: Left wall, Bit 0: Right wall
-    int wallConfig = (wallFront << 2) | (wallLeft << 1) | wallRight;
-
-    switch (wallConfig) {
+    // Step 1: Check immediate neighbors for unvisited cells (prioritize left-hand rule)
+    Direction immediatePriorities[4];
+    immediatePriorities[0] = (Direction)((currDir + 3) % 4);  // Left
+    immediatePriorities[1] = currDir;                          // Straight
+    immediatePriorities[2] = (Direction)((currDir + 1) % 4);  // Right
+    immediatePriorities[3] = (Direction)((currDir + 2) % 4);  // Back
+    
+    for (int i = 0; i < 4; i++) {
+        Direction dir = immediatePriorities[i];
+        int newX = currX;
+        int newY = currY;
+        bool canMove = false;
         
-        case 0b110:  
-        bestDir = (Direction)((currDir + 1) % 4);
-        Serial.println("Decision: FORCED RIGHT (front & left blocked)");
-        break;
+        // Check if we can move in this direction
+        if (dir == NORTH && !(walls[currX][currY] & WALL_NORTH) && currY < MAZE_SIZE) {
+            newY++;
+            canMove = true;
+        } else if (dir == EAST && !(walls[currX][currY] & WALL_EAST) && currX < MAZE_SIZE) {
+            newX++;
+            canMove = true;
+        } else if (dir == SOUTH && !(walls[currX][currY] & WALL_SOUTH) && currY > 0) {
+            newY--;
+            canMove = true;
+        } else if (dir == WEST && !(walls[currX][currY] & WALL_WEST) && currX > 0) {
+            newX--;
+            canMove = true;
+        }
         
-        case 0b101: 
-        bestDir = (Direction)((currDir + 3) % 4);
-        Serial.println("Decision: FORCED LEFT (front & right blocked)");
-        break;
-        
-        case 0b011:  
-        bestDir = currDir;
-        Serial.println("Decision: CORRIDOR → Straight");
-        break;
-        
-        case 0b001:  
-        bestDir = (Direction)((currDir + 3) % 4);  
-        Serial.println("Decision: L-T-JUNCTION () → turn left");
-        break;
-        
-        case 0b010: 
-        bestDir = (Direction)((currDir + 1) % 4);
-        Serial.println("Decision: L-JUNCTION () → right ");
-        break;
-        
-        case 0b111: 
-            bestDir = (Direction)((currDir + 2) % 4);
-            Serial.println("Decision: DEAD END → U-Turn");
-            break;
-            
-        case 0b000:  
-            bestDir = (Direction)((currDir + 3) % 4); 
-            Serial.println("Decision: CROSSROADS → Left (left-hand rule)");
-            break;
-
-        case 0b100: 
-            bestDir = (Direction)((currDir + 3) % 4); 
-            Serial.println("Decision: T-JUNCTION → Left (left-hand rule)");
-            break;
-
-        // default:  // Should never reach here, but safety fallback
-        //     if (!wallLeft) {
-        //         bestDir = (Direction)((currDir + 3) % 4);
-        //     } else if (!wallRight) {
-        //         bestDir = (Direction)((currDir + 1) % 4);
-        //     } else {
-        //         bestDir = (Direction)((currDir + 2) % 4);
-        //     }
-        //     break;
+        // If accessible and unvisited, go there!
+        if (canMove && visited[newX][newY] == 0) {
+            Serial.println("Decision: Adjacent unvisited → " + String(dir) + " to X=" + String(newX) + " Y=" + String(newY));
+            return dir;
+        }
     }
-    return bestDir;
+    
+    // Step 2: No unvisited neighbors - use BFS to find nearest unvisited cell
+    struct QueueNode {
+        int x, y;
+        Direction firstMove;
+    };
+    
+    QueueNode queue[MAZE_SIZE * MAZE_SIZE];
+    bool queued[MAZE_SIZE + 1][MAZE_SIZE + 1];
+    int head = 0, tail = 0;
+    
+    // Initialize queued array
+    for (int i = 0; i <= MAZE_SIZE; i++) {
+        for (int j = 0; j <= MAZE_SIZE; j++) {
+            queued[i][j] = false;
+        }
+    }
+    
+    // Start BFS from current position
+    queue[tail++] = {currX, currY, currDir};
+    queued[currX][currY] = true;
+    
+    while (head < tail) {
+        QueueNode node = queue[head++];
+        
+        // Check all 4 directions from this node (use left-hand priority for consistent exploration)
+        Direction exploreDirs[4];
+        exploreDirs[0] = (Direction)((currDir + 3) % 4);  // Left preference
+        exploreDirs[1] = currDir;                          // Straight
+        exploreDirs[2] = (Direction)((currDir + 1) % 4);  // Right
+        exploreDirs[3] = (Direction)((currDir + 2) % 4);  // Back
+        
+        for (int i = 0; i < 4; i++) {
+            Direction dir = exploreDirs[i];
+            int newX = node.x;
+            int newY = node.y;
+            bool canMove = false;
+            
+            // Check if movement is possible in this direction
+            if (dir == NORTH && !(walls[node.x][node.y] & WALL_NORTH) && node.y < MAZE_SIZE) {
+                newY++;
+                canMove = true;
+            } else if (dir == EAST && !(walls[node.x][node.y] & WALL_EAST) && node.x < MAZE_SIZE) {
+                newX++;
+                canMove = true;
+            } else if (dir == SOUTH && !(walls[node.x][node.y] & WALL_SOUTH) && node.y > 0) {
+                newY--;
+                canMove = true;
+            } else if (dir == WEST && !(walls[node.x][node.y] & WALL_WEST) && node.x > 0) {
+                newX--;
+                canMove = true;
+            }
+            
+            if (canMove && !queued[newX][newY]) {
+                queued[newX][newY] = true;
+                
+                // Determine first move from starting position
+                Direction firstMove = (node.x == currX && node.y == currY) ? dir : node.firstMove;
+                
+                // Found unvisited cell!
+                if (visited[newX][newY] == 0) {
+                    Serial.println("Decision: BFS → Unvisited at X=" + String(newX) + " Y=" + String(newY) + ", First move: " + String(firstMove));
+                    return firstMove;
+                }
+                
+                // Add to queue for further exploration
+                queue[tail++] = {newX, newY, firstMove};
+            }
+        }
+    }
+    
+    // Step 3: All reachable cells visited - use left-hand rule for any valid move
+    Serial.println("Decision: All cells explored → Left-hand rule");
+    
+    for (int i = 0; i < 4; i++) {
+        Direction dir = immediatePriorities[i];
+        bool canMove = false;
+        
+        if (dir == NORTH && !(walls[currX][currY] & WALL_NORTH) && currY < MAZE_SIZE) {
+            canMove = true;
+        } else if (dir == EAST && !(walls[currX][currY] & WALL_EAST) && currX < MAZE_SIZE) {
+            canMove = true;
+        } else if (dir == SOUTH && !(walls[currX][currY] & WALL_SOUTH) && currY > 0) {
+            canMove = true;
+        } else if (dir == WEST && !(walls[currX][currY] & WALL_WEST) && currX > 0) {
+            canMove = true;
+        }
+        
+        if (canMove) {
+            return dir;
+        }
+    }
+    
+    // Should never reach here
+    return currDir;
 }
 
 Direction MazeSolver::getBestDirectionAt(int x, int y)
