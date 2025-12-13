@@ -34,8 +34,7 @@ MazeSolver mazeSolver(leftMotor, rightMotor);
 // Global state variables
 RobotState currentState = IDLE;
 RobotState previousState = IDLE;
-bool isRunning = false;
-bool isFinished = false;
+bool isFinished = true;  // true = ready to start new task, false = task in progress
 bool pathFollowingMode = false;
 
 // Function prototypes
@@ -106,22 +105,20 @@ void loop() {
     switch (currentState) {
         case IDLE:
             // Do nothing, just wait for state change
-            if (isRunning) {
-                isRunning = false;
-                isFinished = false;
+            if (!isFinished) {
+                isFinished = true;
                 pathFollowingMode = false;
                 mazeSolver.stopMotors();
             }
             break;
             
         case EXPLORE:
-            if (isRunning && !isFinished) {
+            if (!isFinished) {
                 mazeSolver.runStep();
                 
                 // Check if exploration finished
                 if (mazeSolver.isFinished()) {
                     isFinished = true;
-                    isRunning = false;
                     
                     Serial.println("\n╔════════════════════════════════════════╗");
                     Serial.println("║       MAZE EXPLORATION COMPLETE!       ║");
@@ -131,13 +128,13 @@ void loop() {
                     mazeSolver.saveMazeToEEPROM();
                     
                     Serial.println(">>> Maze saved to EEPROM!");
-                    Serial.println(">>> Set DIP switches to '10' for shortest path mode\n");
+                    Serial.println(">>> Turn ON Switch 2 for shortest path mode\n");
                 }
             }
             break;
             
         case SHORTEST_PATH:
-            if (isRunning && !isFinished) {
+            if (!isFinished) {
                 if (!pathFollowingMode) {
                     // Compute shortest path once
                     Serial.println("\n>>> Computing shortest path...");
@@ -151,7 +148,6 @@ void loop() {
                 // Check if path following finished
                 if (mazeSolver.isFinished()) {
                     isFinished = true;
-                    isRunning = false;
                     pathFollowingMode = false;
                     
                     Serial.println("\n╔════════════════════════════════════════╗");
@@ -213,9 +209,8 @@ void handleStateChange() {
     
     switch (currentState) {
         case IDLE:
-            if (isRunning) {
-                isRunning = false;
-                isFinished = false;
+            if (!isFinished) {
+                isFinished = true;
                 pathFollowingMode = false;
                 mazeSolver.stopMotors();
                 Serial.println(">>> Operations stopped - Now in standby");
@@ -223,10 +218,9 @@ void handleStateChange() {
             break;
             
         case EXPLORE:
-            if (!isRunning && !isFinished) {
+            if (isFinished) {
                 Serial.println(">>> Starting maze exploration in 2 seconds...");
                 delay(2000);
-                isRunning = true;
                 isFinished = false;
                 pathFollowingMode = false;
                 
@@ -237,13 +231,12 @@ void handleStateChange() {
             break;
             
         case SHORTEST_PATH:
-            if (!isRunning && !isFinished) {
+            if (isFinished) {
                 Serial.println(">>> Loading saved maze from EEPROM...");
                 mazeSolver.loadMazeFromEEPROM();
                 
                 Serial.println(">>> Starting shortest path in 2 seconds...");
                 delay(2000);
-                isRunning = true;
                 isFinished = false;
                 pathFollowingMode = false;
                 
@@ -254,8 +247,7 @@ void handleStateChange() {
         case RESET_MODE:
             Serial.println(">>> Clearing EEPROM and resetting memory...");
             mazeSolver.reset();
-            isRunning = false;
-            isFinished = false;
+            isFinished = true;
             pathFollowingMode = false;
             
             Serial.println(">>> Memory cleared!");
