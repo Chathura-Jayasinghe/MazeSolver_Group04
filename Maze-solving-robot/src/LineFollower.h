@@ -33,6 +33,9 @@ public:
     LineFollower(MotorPID& leftMotor, MotorPID& rightMotor);
     void begin();
     void update();
+    
+    // IR sensor functions (made public for reuse)
+    bool lineDetected();
 
 private:
     MotorPID& leftMotor;
@@ -56,7 +59,6 @@ private:
     void turnLeft_line();
     void turnRight_Line();
     void stopMotors();
-    bool lineDetected();
     bool searchForLine(bool searchLeft);
 };
 

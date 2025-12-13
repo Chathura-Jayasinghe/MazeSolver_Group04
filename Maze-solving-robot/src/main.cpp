@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "MotorPID.h"
 #include "MazeSolver.h"
+#include "LineFollower.h"
 
 // --- Hardware Definitions ---
 #define MOTOR1_IN1 8
@@ -26,21 +27,30 @@ enum RobotState {
     RESET_MODE = 3      // Switch 3 ON - Reset memory
 };
 
+// --- Operation Modes ---
+enum OperationMode {
+    LINE_FOLLOWING = 0,  // Following line until maze entrance
+    WALL_FOLLOWING = 1   // Following walls in maze
+};
+
 MotorPID leftMotor(MOTOR1_IN1, MOTOR1_IN2, ENCODER1_A, ENCODER1_B, true);
 MotorPID rightMotor(MOTOR2_IN1, MOTOR2_IN2, ENCODER2_A, ENCODER2_B, true);
 
 MazeSolver mazeSolver(leftMotor, rightMotor);
+LineFollower lineFollower(leftMotor, rightMotor);
 
 // Global state variables
 RobotState currentState = IDLE;
 RobotState previousState = IDLE;
 bool isFinished = true;  // true = ready to start new task, false = task in progress
 bool pathFollowingMode = false;
+OperationMode operationMode = LINE_FOLLOWING;  // Start with line following
 
 // Function prototypes
 RobotState readSwitchState();
 void printCurrentState(RobotState state);
 void handleStateChange();
+bool checkMazeEntrance();
 
 void setup() {
     Serial.begin(9600);
@@ -48,6 +58,7 @@ void setup() {
     leftMotor.begin();
     rightMotor.begin();
     mazeSolver.begin();
+    lineFollower.begin();
 
     // Initialize switch pins
     pinMode(SWITCH_EXPLORE, INPUT_PULLUP);
@@ -114,46 +125,70 @@ void loop() {
             
         case EXPLORE:
             if (!isFinished) {
-                mazeSolver.runStep();
-                
-                // Check if exploration finished
-                if (mazeSolver.isFinished()) {
-                    isFinished = true;
+                if (operationMode == LINE_FOLLOWING) {
+                    // Follow line until maze entrance detected
+                    lineFollower.update();
                     
-                    Serial.println("\n╔════════════════════════════════════════╗");
-                    Serial.println("║       MAZE EXPLORATION COMPLETE!       ║");
-                    Serial.println("╚════════════════════════════════════════╝\n");
+                    // Check for maze entrance
+                    if (checkMazeEntrance()) {
+                        operationMode = WALL_FOLLOWING;
+                        Serial.println(">>> Maze entrance detected! Switching to wall following mode");
+                        delay(500);  // Brief pause for transition
+                    }
+                } else {
+                    // Wall following mode - normal maze exploration
+                    mazeSolver.runStep();
                     
-                    // Save maze to EEPROM
-                    mazeSolver.saveMazeToEEPROM();
-                    
-                    Serial.println(">>> Maze saved to EEPROM!");
-                    Serial.println(">>> Turn ON Switch 2 for shortest path mode\n");
+                    // Check if exploration finished
+                    if (mazeSolver.isFinished()) {
+                        isFinished = true;
+                        
+                        Serial.println("\n╔════════════════════════════════════════╗");
+                        Serial.println("║       MAZE EXPLORATION COMPLETE!       ║");
+                        Serial.println("╚════════════════════════════════════════╝\n");
+                        
+                        // Save maze to EEPROM
+                        mazeSolver.saveMazeToEEPROM();
+                        
+                        Serial.println(">>> Maze saved to EEPROM!");
+                        Serial.println(">>> Turn ON Switch 2 for shortest path mode\n");
+                    }
                 }
             }
             break;
             
         case SHORTEST_PATH:
             if (!isFinished) {
-                if (!pathFollowingMode) {
-                    // Compute shortest path once
-                    Serial.println("\n>>> Computing shortest path...");
-                    mazeSolver.computeShortestPath();
-                    pathFollowingMode = true;
-                    Serial.println(">>> Following shortest path...\n");
-                }
-                
-                mazeSolver.followShortestPathStep();
-                
-                // Check if path following finished
-                if (mazeSolver.isFinished()) {
-                    isFinished = true;
-                    pathFollowingMode = false;
+                if (operationMode == LINE_FOLLOWING) {
+                    // Follow line until maze entrance detected
+                    lineFollower.update();
                     
-                    Serial.println("\n╔════════════════════════════════════════╗");
-                    Serial.println("║      SHORTEST PATH COMPLETE!           ║");
-                    Serial.println("╚════════════════════════════════════════╝\n");
-                    Serial.println(">>> Mission accomplished!\n");
+                    // Check for maze entrance
+                    if (checkMazeEntrance()) {
+                        operationMode = WALL_FOLLOWING;
+                        Serial.println(">>> Maze entrance detected! Switching to shortest path mode");
+                        
+                        // Compute shortest path once
+                        Serial.println(">>> Computing shortest path...");
+                        mazeSolver.computeShortestPath();
+                        pathFollowingMode = true;
+                        Serial.println(">>> Following shortest path...\n");
+                        delay(500);  // Brief pause for transition
+                    }
+                } else {
+                    // Wall following mode - shortest path execution
+                    mazeSolver.followShortestPathStep();
+                    
+                    // Check if path following finished
+                    if (mazeSolver.isFinished()) {
+                        isFinished = true;
+                        pathFollowingMode = false;
+                        
+                        Serial.println("\n╔════════════════════════════════════════╗");
+                        Serial.println("║      SHORTEST PATH COMPLETE!           ║");
+                        Serial.println("╚════════════════════════════════════════╝\n");
+                        Serial.println(">>> Mission accomplished!\n");
+                    }
                 }
             }
             break;
@@ -220,9 +255,11 @@ void handleStateChange() {
         case EXPLORE:
             if (isFinished) {
                 Serial.println(">>> Starting maze exploration in 2 seconds...");
+                Serial.println(">>> Initial mode: LINE FOLLOWING");
                 delay(2000);
                 isFinished = false;
                 pathFollowingMode = false;
+                operationMode = LINE_FOLLOWING;  // Always start with line following
                 
                 // Reset robot position for fresh exploration
                 mazeSolver.reset();
@@ -236,9 +273,11 @@ void handleStateChange() {
                 mazeSolver.loadMazeFromEEPROM();
                 
                 Serial.println(">>> Starting shortest path in 2 seconds...");
+                Serial.println(">>> Initial mode: LINE FOLLOWING");
                 delay(2000);
                 isFinished = false;
                 pathFollowingMode = false;
+                operationMode = LINE_FOLLOWING;  // Always start with line following
                 
                 Serial.println(">>> Shortest path mode started!\n");
             }
@@ -249,10 +288,35 @@ void handleStateChange() {
             mazeSolver.reset();
             isFinished = true;
             pathFollowingMode = false;
+            operationMode = LINE_FOLLOWING;
             
             Serial.println(">>> Memory cleared!");
             Serial.println(">>> Turn OFF Switch 3 and turn ON desired mode switch\n");
             delay(1000);
             break;
     }
+}
+
+// Maze entrance detection function using existing class methods
+bool checkMazeEntrance() {
+    // Use MazeSolver's existing readSensor function
+    float leftDistance = mazeSolver.readSensor(26, 28);   // US_LEFT pins
+    float rightDistance = mazeSolver.readSensor(37, 36);  // US_RIGHT pins
+    
+    // Use LineFollower's lineDetected function (inverted logic - we want all sensors to see black)
+    bool allBlack = lineFollower.lineDetected();  // lineDetected returns true when line is found (white), we want all black
+    
+    bool wallsDetected = (leftDistance > 0 && leftDistance <= 15) && 
+                        (rightDistance > 0 && rightDistance <= 15);
+    
+    if (allBlack && wallsDetected) {
+        Serial.print(">>> Maze entrance detected - Left: ");
+        Serial.print(leftDistance);
+        Serial.print("cm, Right: ");
+        Serial.print(rightDistance);
+        Serial.println("cm");
+        return true;
+    }
+    
+    return false;
 }

@@ -63,6 +63,9 @@ public:
     void loadMazeFromEEPROM();
     void printSavedMaze();
     void stopMotors();
+
+    // Sensor Functions (made public for reuse)
+    float readSensor(int trig, int echo);
     
 private:
     MotorPID& leftMotor;
@@ -84,7 +87,6 @@ private:
     int pathIndex;
 
     // Helper Functions
-    float readSensor(int trig, int echo);
     void  updateWalls();
     void  floodFill();
     Direction getBestDirection();
