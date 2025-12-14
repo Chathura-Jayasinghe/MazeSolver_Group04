@@ -17,7 +17,7 @@
 #define TURN_SPEED      40
 #define WALL_THRESHOLD  15.0f  
 #define COUNTS_PER_90   240L
-#define COUNTS_PER_CELL 525L   
+#define COUNTS_PER_CELL 520L   
 
 // --- PD Wall Following constants ---
 const float KP = 2.2;
@@ -56,6 +56,7 @@ public:
     void reset();
     void computeShortestPath();
     void followShortestPathStep();
+    float readSensor(int trig, int echo);
 
 private:
     MotorPID& leftMotor;
@@ -76,7 +77,6 @@ private:
     int pathIndex;
 
     // Helper Functions
-    float readSensor(int trig, int echo);
     void  updateWalls();
     void  floodFill();
     Direction getBestDirection();
