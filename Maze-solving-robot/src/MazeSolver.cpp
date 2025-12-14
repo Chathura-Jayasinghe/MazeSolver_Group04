@@ -269,61 +269,56 @@ Direction MazeSolver::getBestDirection()
     float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
     float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
 
-    bool wallFront = (f > 0 && f < WALL_THRESHOLD);  // Use consistent threshold
-    bool wallLeft = (l > 0 && l < WALL_THRESHOLD);
-    bool wallRight = (r > 0 && r < WALL_THRESHOLD);
+    const float MIN_FORWARD_DISTANCE = 15.0;
 
-    Serial.print("Sensors: F=" + String(f) + " L=" + String(l) + " R=" + String(r));
-    Serial.println(" | Walls: F=" + String(wallFront) + " L=" + String(wallLeft) + " R=" + String(wallRight));
+    bool wallFront = (f > -2 && f < MIN_FORWARD_DISTANCE);
+    bool wallLeft = (l > 0 && l < 12);
+    bool wallRight = (r > 0 && r < 12);
 
-    // PRIORITY 1: Dead end (all walls) → U-turn
-    if (wallFront && wallLeft && wallRight)
-    {
-        bestDir = (Direction)((currDir + 2) % 4);
-        Serial.println("Decision: DEAD END → U-Turn");
-    }
-    
-    // PRIORITY 2: Front blocked, only one side open → Forced turn
-    else if (wallFront && wallLeft && !wallRight)
-    {
+    int wallConfig = (wallFront << 2) | (wallLeft << 1) | wallRight;
+
+    switch (wallConfig) {
+        
+        case 0b110:  
         bestDir = (Direction)((currDir + 1) % 4);
         Serial.println("Decision: FORCED RIGHT (front & left blocked)");
-    }
-    else if (wallFront && !wallLeft && wallRight)
-    {
+        break;
+        
+        case 0b101: 
         bestDir = (Direction)((currDir + 3) % 4);
         Serial.println("Decision: FORCED LEFT (front & right blocked)");
-    }
-    
-    // PRIORITY 3: Front clear → Prefer straight (includes corridors and L-junctions)
-    else if (!wallFront)
-    {
-        bestDir = currDir;  // Keep going straight
+        break;
         
-        if (wallLeft && wallRight)
-            Serial.println("Decision: CORRIDOR → Straight");
-        else if (wallLeft)
-            Serial.println("Decision: L-JUNCTION (right open) → Straight");
-        else if (wallRight)
-            Serial.println("Decision: L-JUNCTION (left open) → Straight");
-        else
-            Serial.println("Decision: OPEN SPACE → Straight");
-    }
-    
-    // PRIORITY 4: Front blocked, both sides open → T-junction (arbitrary choice)
-    else if (wallFront && !wallLeft && !wallRight)
-    {
-        bestDir = (Direction)((currDir + 3) % 4);  // Choose left
-        Serial.println("Decision: T-JUNCTION → Left (left-hand rule)");
-    }
-    
-    // Fallback (should never reach here)
-    else
-    {
+        case 0b011:  
         bestDir = currDir;
-        Serial.println("Decision: FALLBACK → Straight");
-    }
+        Serial.println("Decision: CORRIDOR → Straight");
+        break;
+        
+        case 0b001:  
+        bestDir = (Direction)((currDir + 3) % 4);  
+        Serial.println("Decision: L-T-JUNCTION () → turn left");
+        break;
+        
+        case 0b010: 
+        bestDir = (Direction)((currDir + 1) % 4);
+        Serial.println("Decision: L-JUNCTION () → right ");
+        break;
+        
+        case 0b111: 
+            bestDir = (Direction)((currDir + 2) % 4);
+            Serial.println("Decision: DEAD END → U-Turn");
+            break;
+            
+        case 0b000:  
+            bestDir = (Direction)((currDir + 3) % 4); 
+            Serial.println("Decision: CROSSROADS → Left (left-hand rule)");
+            break;
 
+        case 0b100: 
+            bestDir = (Direction)((currDir + 3) % 4); 
+            Serial.println("Decision: T-JUNCTION → Left (left-hand rule)");
+            break;
+    }
     return bestDir;
 }
 
