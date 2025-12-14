@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "MotorPID.h"
 #include "MazeSolver.h"
+#include "LineFollower.h"
 
 // --- Hardware Definitions ---
 #define MOTOR1_IN1 8
@@ -17,10 +18,35 @@ MotorPID leftMotor(MOTOR1_IN1, MOTOR1_IN2, ENCODER1_A, ENCODER1_B, true);
 MotorPID rightMotor(MOTOR2_IN1, MOTOR2_IN2, ENCODER2_A, ENCODER2_B, true);
 
 MazeSolver mazeSolver(leftMotor, rightMotor);
+LineFollower lineFollower(leftMotor, rightMotor);
 
-void setup() {
+const int irPins[8] = {IR1, IR2, IR3, IR4, IR5, IR6, IR7, IR8};
+
+bool allWhiteDetected()
+{
+    int sumVal = 0;
+
+    for (int i = 0; i < 8; i++)
+    {
+        int value = digitalRead(irPins[i]);
+        sumVal += value;
+    }
+
+    if (sumVal == 0)
+    {
+        // mazeSolver.forwardForMs(80, 10);
+        return false;
+    }
+    else
+    {
+        return true;
+    }
+}
+
+void setup()
+{
     Serial.begin(9600);
-    
+
     leftMotor.begin();
     rightMotor.begin();
     mazeSolver.begin();
@@ -31,48 +57,54 @@ void setup() {
     delay(2000);
 }
 
-void loop() {
-    // --- Mode selection (temporary booleans; replace with switch later) ---
-    static bool modeScan = true;    // Mode 1: explore + build map until IR white
-    // static bool modeFollow = false; // Mode 2: follow precomputed shortest path
-    // static bool modeReset = false;  // Mode 3: clear memory and pose
+// Mode: 0 = First Maze, 1 = Line Following, 2 = Second Maze
+int currentMode = 0;
 
-    // Example toggling logic placeholder:
-    // You can change these booleans at runtime based on a physical switch later.
-
-    // if (modeReset) {
-    //     mazeSolver.reset();
-    //     modeReset = false;
-    //     modeScan = true;
-    //     modeFollow = false;
-    //     Serial.println("RESET DONE");
-    //     delay(500);
-    //     return;
-    // }
-
-    if (modeScan) {
-        if (true) {
-            mazeSolver.runStep();
-        } else {
-            Serial.println("-------maze scanning completed-------");
-            mazeSolver.computeShortestPath();
-            // switch to follow mode
-            // modeScan = false;
-            // modeFollow = true;
-            // Serial.println("PATH READY. Switching to follow mode.");
+void loop()
+{
+    if (currentMode == 0)
+    {
+        // First maze solving mode
+        if (allWhiteDetected())
+        {
+            Serial.println("All white detected! Switching to line following mode...");
+            currentMode = 1;
+            leftMotor.setDirection(true);
+            rightMotor.setDirection(true);
+            leftMotor.setSpeed(80);
+            rightMotor.setSpeed(80);
             delay(500);
+            leftMotor.setSpeed(0);
+            rightMotor.setSpeed(0);
+            lineFollower.begin();
         }
-        return;
+        else
+        {
+            mazeSolver.runStep();
+        }
     }
-
-    // if (modeFollow) {
-    //     // Follow the stored shortest path one step at a time
-    //     mazeSolver.followShortestPathStep();
-    //     // When path done, stop
-    //     if (mazeSolver.isFinished()) {
-    //         Serial.println("TARGET REACHED - FOLLOW MODE COMPLETE");
-    //         delay(1000);
-    //     }
-    //     return;
-    // }
+    else if (currentMode == 1)
+    {
+        // Line following mode
+        if (allWhiteDetected())
+        {
+            Serial.println("All white detected at end of line! Switching to second maze...");
+            currentMode = 2;
+            leftMotor.setSpeed(80);
+            rightMotor.setSpeed(80);
+            delay(500);
+            leftMotor.setSpeed(0);
+            rightMotor.setSpeed(0);
+            mazeSolver.begin();
+        }
+        else
+        {
+            lineFollower.update();
+        }
+    }
+    else if (currentMode == 2)
+    {
+        // Second maze solving mode
+        mazeSolver.runStep();
+    }
 }
