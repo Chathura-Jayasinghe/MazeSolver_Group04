@@ -1,4 +1,7 @@
 #include "MazeSolver.h"
+#include "LineFollower.h"
+
+#define NUM_SENSORS 8
 
 MazeSolver::MazeSolver(MotorPID &left, MotorPID &right)
     : leftMotor(left), rightMotor(right)

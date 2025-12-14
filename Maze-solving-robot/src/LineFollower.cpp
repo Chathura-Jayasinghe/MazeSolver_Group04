@@ -1,150 +1,92 @@
 #include "LineFollower.h"
 
-LineFollower::LineFollower(MotorPID& left, MotorPID& right)
-    : leftMotor(left), rightMotor(right), 
-      prevError(0.0), prevTime(0), turnState(NORMAL_FOLLOWING) {
+LineFollower::LineFollower(int leftMotorIn1, int leftMotorIn2, int rightMotorIn1, int rightMotorIn2, const int* irPins, const int* weights, int numSensors)
+    : leftMotorIn1(leftMotorIn1), leftMotorIn2(leftMotorIn2), rightMotorIn1(rightMotorIn1), rightMotorIn2(rightMotorIn2), irPins(irPins), weights(weights), numSensors(numSensors) {}
+
+void LineFollower::setup() {
+    pinMode(leftMotorIn1, OUTPUT);
+    pinMode(leftMotorIn2, OUTPUT);
+    pinMode(rightMotorIn1, OUTPUT);
+    pinMode(rightMotorIn2, OUTPUT);
+
+    prevTime = millis();
 }
 
-void LineFollower::begin() {
-    for (int i = 0; i < NUM_SENSORS; i++) {
-        pinMode(irPins[i], INPUT);
-    }
-    
-    turnState = NORMAL_FOLLOWING;
-}
-
-void LineFollower::runMotors_Line(int leftPWM, int rightPWM) {
+void LineFollower::runMotors(int leftPWM, int rightPWM) {
     leftPWM = constrain(leftPWM, 0, 255);
     rightPWM = constrain(rightPWM, 0, 255);
 
-    leftMotor.setDirection(true);
-    rightMotor.setDirection(true);
-    leftMotor.setSpeed(leftPWM);
-    rightMotor.setSpeed(rightPWM);
+    analogWrite(leftMotorIn1, 0);
+    analogWrite(leftMotorIn2, leftPWM);
+
+    analogWrite(rightMotorIn1, 0);
+    analogWrite(rightMotorIn2, rightPWM);
 }
 
-void LineFollower::turnLeft_line() {
-    leftMotor.setDirection(false);
-    rightMotor.setDirection(true);
-    leftMotor.setSpeed(TURN_SPEED_LINE);
-    rightMotor.setSpeed(TURN_SPEED_LINE);
-}
+void LineFollower::readLineAnalog(long &weightedSum, long &sumStrength) {
+    weightedSum = 0;
+    sumStrength = 0;
 
-void LineFollower::turnRight_Line() {
-    leftMotor.setDirection(true);
-    rightMotor.setDirection(false);
-    leftMotor.setSpeed(TURN_SPEED_LINE);
-    rightMotor.setSpeed(TURN_SPEED_LINE);
-}
+    for (int i = 0; i < numSensors; i++) {
+        int a = analogRead(irPins[i]);
 
-void LineFollower::stopMotors() {
-    leftMotor.setSpeed(0);
-    rightMotor.setSpeed(0);
-}
+        int strength = a - 1000; // IR_THRESHOLD
+        if (strength < 0) strength = 0;
+        if (strength > 400) strength = 400; // MAX_STRENGTH
 
-bool LineFollower::lineDetected() {
-    for (int i = 0; i < NUM_SENSORS; i++) {
-        if (digitalRead(irPins[i]) == HIGH) {
-            return true;
-        }
+        weightedSum += (long)weights[i] * (long)strength;
+        sumStrength += strength;
     }
-    return false;
 }
 
-bool LineFollower::searchForLine(bool searchLeft) {
+bool LineFollower::lineDetectedAnalog() {
+    long ws, ss;
+    readLineAnalog(ws, ss);
+    return (ss >= 25); // LINE_DETECT_SUM_MIN
+}
+
+bool LineFollower::searchForLineAnalog(bool searchLeft) {
     unsigned long searchStart = millis();
-    
-    while (millis() - searchStart < SEARCH_DURATION_MS) {
-        if (searchLeft) {
-            turnLeft_line();
-        } else {
-            turnRight_Line();
-        }
+
+    while (millis() - searchStart < 1000) { // SEARCH_DURATION_MS
+        if (searchLeft) runMotors(0, 90); // TURN_SPEED_LINE
+        else            runMotors(90, 0);
 
         delay(10);
-        
-        if (lineDetected()) {
+
+        if (lineDetectedAnalog()) {
             return true;
         }
     }
     return false;
 }
 
-void LineFollower::update() {
-    int sumVal = 0;
-    int weightedSum = 0;
+void LineFollower::followLine() {
+    long weightedSum = 0;
+    long sumStrength = 0;
 
-    // Read IR sensors
-    for (int i = 0; i < NUM_SENSORS; i++) {
-        int value = digitalRead(irPins[i]);
-        if (value == HIGH) {
-            weightedSum += weights[i];
-            sumVal++;
-        }
+    readLineAnalog(weightedSum, sumStrength);
+
+    if (sumStrength < 25) { // LINE_DETECT_SUM_MIN
+        if (searchForLineAnalog(true)) return;
+        if (searchForLineAnalog(false)) return;
+        runMotors(0, 0);
+        return;
     }
 
-    // Handle different states
-    switch (turnState) {
-        case NORMAL_FOLLOWING: {
-            if (sumVal == 0) {
-                Serial.println("Line lost - starting L-turn search");
-                turnState = SEARCHING_LEFT;
-                return;
-            }
+    float error = (float)weightedSum / (float)sumStrength;
 
-            // Normal line following with PD control
-            float error = (float)weightedSum / sumVal;
+    unsigned long now = millis();
+    float dt = (now - prevTime) / 1000.0f;
+    float derivative = (dt > 0.0f) ? (error - prevError) / dt : 0.0f;
 
-            unsigned long now = millis();
-            float dt = (now - prevTime) / 1000.0;
-            float derivative = 0;
-            if (dt > 0.0) {
-                derivative = (error - prevError) / dt;
-            }
+    float correction = Kp * error + Kd * derivative;
 
-            float correction = Kp_line * error + Kd_line * derivative;
+    int leftPWM  = baseSpeed - (int)correction;
+    int rightPWM = baseSpeed + (int)correction;
 
-            int leftPWM = BASE_SPEED_LINE - correction;
-            int rightPWM = BASE_SPEED_LINE + correction;
+    runMotors(leftPWM, rightPWM);
 
-            runMotors_Line(leftPWM, rightPWM);
-
-            prevError = error;
-            prevTime = now;
-            break;
-        }
-
-        case SEARCHING_LEFT: {
-            Serial.println("Searching left...");
-            if (searchForLine(true)) {
-                Serial.println("Found line on the left!");
-                turnState = NORMAL_FOLLOWING;
-            } else {
-                Serial.println("Line not found on left, trying right...");
-                turnState = SEARCHING_RIGHT;
-                searchForLine(false);
-                delay(100);
-            }
-            break;
-        }
-
-        case SEARCHING_RIGHT: {
-            Serial.println("Searching right...");
-            if (searchForLine(false)) {
-                Serial.println("Found line on the right!");
-                turnState = NORMAL_FOLLOWING;
-            } else {
-                Serial.println("Line not found in either direction - stopping");
-                stopMotors();
-                delay(1000);
-                turnState = NORMAL_FOLLOWING;
-            }
-            break;
-        }
-
-        default:
-            turnState = NORMAL_FOLLOWING;
-            break;
-    }
-    delay(20);
+    prevError = error;
+    prevTime  = now;
 }
