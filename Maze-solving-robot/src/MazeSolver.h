@@ -1,3 +1,4 @@
+#ifndef MAZESOLVER_H
 #define MAZESOLVER_H
 
 #include <Arduino.h>
@@ -13,12 +14,12 @@
 #define US_RIGHT_ECHO 36
 
 // --- Calibration Constants (TUNE THESE) ---
-#define BASE_SPEED      60
+#define BASE_SPEED      50
 #define TURN_SPEED      70
 #define WALL_THRESHOLD  15.0f
 #define COUNTS_PER_90   250L 
 #define COUNTS_PER_180  470L
-#define COUNTS_PER_CELL 515L   //525L
+#define COUNTS_PER_CELL 525L   //525L
 
 // --- PD Wall Following constants ---
 const float KP = 2.2;
@@ -74,7 +75,7 @@ private:
     // Robot State
     int currX, currY;
     Direction currDir;
-    bool MET_FRONT_WALL;
+    bool CAN_POSSITION_UPDATE;
     
     // The Map
     byte walls[MAZE_SIZE+1][MAZE_SIZE+1];
@@ -89,6 +90,8 @@ private:
     // Helper Functions
     void  updateWalls();
     void  floodFill();
+    bool hasWallAbsolute(int x, int y, int absDir);
+    Direction getBestDirectionFromMap();
     Direction getBestDirection();
     Direction getBestDirectionAt(int x, int y);
     
@@ -105,3 +108,5 @@ private:
     long encRight();
     void encZero();
 };
+
+#endif // MAZESOLVER_H

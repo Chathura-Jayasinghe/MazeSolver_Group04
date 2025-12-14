@@ -61,8 +61,9 @@ void MazeSolver::begin()
 
 void MazeSolver::runStep()
 {
+    CAN_POSSITION_UPDATE = true;
     updateWalls();
-    saveMazeToEEPROM();
+    // saveMazeToEEPROM();
 
     Serial.println("Full maze:");
     for (int x = 0; x <= MAZE_SIZE; x++) {
@@ -87,7 +88,7 @@ void MazeSolver::runStep()
     // floodFill();
 
     // 4. Decide Best Move
-    Direction nextDir = getBestDirection();
+    Direction nextDir = getBestDirectionFromMap();
     Serial.println("Next Direction: " + String(nextDir) + " from Current Direction: " + String(currDir));
     Serial.println("==============================================================\n");
 
@@ -97,14 +98,16 @@ void MazeSolver::runStep()
     moveOneCell();
 
     // 6. Update Virtual Coordinates
-    if (currDir == NORTH)
-        currY++;
-    else if (currDir == EAST)
-        currX++;
-    else if (currDir == SOUTH)
-        currY--;
-    else if (currDir == WEST)
-        currX--;
+    if (CAN_POSSITION_UPDATE) {
+        if (currDir == NORTH)
+            currY++;
+        else if (currDir == EAST)
+            currX++;
+        else if (currDir == SOUTH)
+            currY--;
+        else if (currDir == WEST)
+            currX--;
+    }
     
     // Store position coordinates (e.g., X=5, Y=6 -> 56)
     visited[currX][currY] = (currX * 10) + currY;
@@ -261,7 +264,6 @@ void MazeSolver::updateWalls()
     // if ((walls[currX][currY] & WALL_WEST) && currX > 0)
     //     walls[currX - 1][currY] |= WALL_EAST;
 
-    Serial.println("Full maze:");
     for (int x = 0; x <= MAZE_SIZE; x++) {
         String row = "";
         for (int y = 0; y <= MAZE_SIZE; y++) {
@@ -271,22 +273,26 @@ void MazeSolver::updateWalls()
     }
 }
 
-Direction MazeSolver::getBestDirection()
+bool MazeSolver::hasWallAbsolute(int x, int y, int absDir)
+{
+    if (absDir == NORTH) return walls[x][y] & WALL_NORTH;
+    if (absDir == EAST)  return walls[x][y] & WALL_EAST;
+    if (absDir == SOUTH) return walls[x][y] & WALL_SOUTH;
+    if (absDir == WEST)  return walls[x][y] & WALL_WEST;
+    return true;
+}
+
+Direction MazeSolver::getBestDirectionFromMap()
 {
     Direction bestDir = currDir;
+    int frontAbs = currDir;
+    int leftAbs  = (currDir + 3) % 4;
+    int rightAbs = (currDir + 1) % 4;
 
-    float f = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
-    float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
-    float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
+    bool wallFront = hasWallAbsolute(currX, currY, frontAbs);
+    bool wallLeft  = hasWallAbsolute(currX, currY, leftAbs);
+    bool wallRight = hasWallAbsolute(currX, currY, rightAbs);
 
-    // Define distance thresholds
-    const float MIN_FORWARD_DISTANCE = 15.0; // Minimum safe distance to move forward
-
-    bool wallFront = (f > -2 && f < MIN_FORWARD_DISTANCE);
-    bool wallLeft = (l > 0 && l < 12);
-    bool wallRight = (r > 0 && r < 12);
-
-    // Bit 2: Front wall, Bit 1: Left wall, Bit 0: Right wall
     int wallConfig = (wallFront << 2) | (wallLeft << 1) | wallRight;
 
     switch (wallConfig) {
@@ -504,10 +510,11 @@ void MazeSolver::moveOneCell() {
     float correction = 0.0f;
 
     float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
-    if (frontDist > 0 && frontDist < 5.0) {
+    if (frontDist > 0 && frontDist < 10.0) {
         Serial.println("Breaking [Before]");
+        CAN_POSSITION_UPDATE = false;
         return;
-    }
+        }
 
     leftMotor.setSpeed(BASE_SPEED);
     rightMotor.setSpeed(BASE_SPEED);
@@ -526,7 +533,7 @@ void MazeSolver::moveOneCell() {
 
         if (rightWallExists && leftWallExists)
         {
-            error = leftDist - rightDist + 1;
+            error = leftDist - rightDist;
         }
         else if (rightWallExists)
         {
@@ -534,7 +541,7 @@ void MazeSolver::moveOneCell() {
         }
         else if (leftWallExists)
         {
-            error = leftDist - DESIRED_WALL_DISTANCE + 1;
+            error = leftDist - DESIRED_WALL_DISTANCE;
         }
         else
         {
