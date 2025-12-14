@@ -41,6 +41,7 @@ void setup() {
 void loop() {
     static bool isRunning = false;
     static bool isFinished = false;
+    static bool dfsInitialized = false;
     
     // Check for serial commands
     if (Serial.available() > 0) {
@@ -59,6 +60,7 @@ void loop() {
             mazeSolver.reset();
             isRunning = false;
             isFinished = false;
+            dfsInitialized = false;
             Serial.println(">>> System reset complete. Ready for next command...\n");
             return;
         }
@@ -66,6 +68,10 @@ void loop() {
             // Start maze exploration
             Serial.println("\n>>> Starting maze exploration in 2 seconds...\n");
             delay(2000);
+            // Initialize DFS only once per run
+            mazeSolver.dfsInit();
+            dfsInitialized = true;
+
             isRunning = true;
             isFinished = false;
             return;
@@ -76,18 +82,29 @@ void loop() {
     if (isRunning && !isFinished) {
         mazeSolver.runStep();
         
-        // Check if finished (reached target or detected white)
-        if (mazeSolver.isFinished()) {
+        if (isRunning && !isFinished) {
+
+        // Safety: make sure init happened
+        if (!dfsInitialized) {
+            mazeSolver.dfsInit();
+            dfsInitialized = true;
+        }
+
+        // One DFS step (move or backtrack)
+        mazeSolver.runStepDFS();
+
+        // Check if DFS has fully explored all reachable cells
+        if (mazeSolver.dfsFinished()) {
             isFinished = true;
             isRunning = false;
-            
+
             Serial.println("\n╔════════════════════════════════════════╗");
-            Serial.println("║       MAZE EXPLORATION COMPLETE!       ║");
+            Serial.println("║        DFS EXPLORATION COMPLETE!       ║");
             Serial.println("╚════════════════════════════════════════╝\n");
-            
-            // Save maze to EEPROM
+
+            // Save final maze
             mazeSolver.saveMazeToEEPROM();
-            
+
             Serial.println("\n>>> Maze saved to EEPROM!");
             Serial.println(">>> You can now:");
             Serial.println("    1. Disconnect the cable");

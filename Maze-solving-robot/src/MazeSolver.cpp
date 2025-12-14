@@ -29,10 +29,10 @@ MazeSolver::MazeSolver(MotorPID &left, MotorPID &right)
         {
             walls[x][y] = 0;
             dist[x][y] = 255;
-            visited[x][y] = 0;  // Not visited yet
+            visited[x][y] = 0; // Not visited yet
         }
     }
-    
+
     // Mark starting position with its coordinates (0,0 = 00)
     visited[0][0] = (0 * 10) + 0;
 
@@ -61,53 +61,88 @@ void MazeSolver::begin()
 
 void MazeSolver::runStep()
 {
+    // 1) Update walls & save (your original)
     updateWalls();
     saveMazeToEEPROM();
 
     Serial.println("Full maze:");
-    for (int x = 0; x <= MAZE_SIZE; x++) {
+    for (int x = 0; x <= MAZE_SIZE; x++)
+    {
         String row = "";
-        for (int y = 0; y <= MAZE_SIZE; y++) {
+        for (int y = 0; y <= MAZE_SIZE; y++)
+        {
             row += String(walls[x][y], BIN) + " ";
         }
         Serial.println("row: " + row);
     }
 
     Serial.println("[Current Position] X: " + String(currX) + " Y: " + String(currY) + " Dir: " + String(currDir));
-    Serial.println("[Target Position] X: " + String(TARGET_X) + " Y: " + String(TARGET_Y));
 
-    if (currX == TARGET_X && currY == TARGET_Y)
+    // Mark visited
+    dfsSeen[currX][currY] = true;
+    visited[currX][currY] = (currX * 10) + currY;
+
+    // If DFS already complete
+    if (dfsDone)
     {
-        Serial.println("\n>>> TARGET REACHED! <<<\n");
+        Serial.println("\n>>> DFS COMPLETE! <<<\n");
         stopMotors();
-        return; // DONE!
+        return;
     }
 
-    // 3. Recalculate Distances (Flood Fill)
-    // floodFill();
+    // 2) DFS expand to an unvisited neighbor if possible
+    Direction nextDir;
+    if (getUnvisitedNeighborDirDFS(nextDir))
+    {
+        // Calculate neighbor cell
+        int nx = currX, ny = currY;
+        if (nextDir == NORTH)
+            ny++;
+        else if (nextDir == EAST)
+            nx++;
+        else if (nextDir == SOUTH)
+            ny--;
+        else if (nextDir == WEST)
+            nx--;
 
-    // 4. Decide Best Move
-    Direction nextDir = getBestDirection();
-    Serial.println("Next Direction: " + String(nextDir) + " from Current Direction: " + String(currDir));
+        // Save back direction so we can return here later
+        dfsBackDir[nx][ny] = (Direction)((nextDir + 2) % 4);
+
+        Serial.println("DFS: NEW CELL -> dir=" + String(nextDir));
+        Serial.println("==============================================================\n");
+
+        delay(1000);
+        moveAbsDirAndUpdatePose(nextDir);
+
+        // Push new cell to stack
+        dfsStack[++dfsTop] = {(byte)currX, (byte)currY};
+
+        stopMotors();
+        delay(1000);
+        return;
+    }
+
+    // 3) No unvisited neighbor -> backtrack
+    Serial.println("DFS: No unvisited neighbors -> BACKTRACK");
     Serial.println("==============================================================\n");
 
-    // 5. Execute Move
-    delay(1000);
-    turnTo(nextDir);
-    moveOneCell();
+    // Pop current cell
+    dfsTop--;
 
-    // 6. Update Virtual Coordinates
-    if (currDir == NORTH)
-        currY++;
-    else if (currDir == EAST)
-        currX++;
-    else if (currDir == SOUTH)
-        currY--;
-    else if (currDir == WEST)
-        currX--;
-    
-    // Store position coordinates (e.g., X=5, Y=6 -> 56)
-    visited[currX][currY] = (currX * 10) + currY;
+    // Stack empty => DFS finished
+    if (dfsTop < 0)
+    {
+        Serial.println("\n>>> DFS COMPLETE! All reachable cells visited. <<<\n");
+        dfsDone = true;
+        stopMotors();
+        return;
+    }
+
+    // Move back using stored back direction for this cell
+    Direction goBack = dfsBackDir[currX][currY];
+
+    delay(1000);
+    moveAbsDirAndUpdatePose(goBack);
 
     stopMotors();
     delay(1000);
@@ -135,6 +170,113 @@ bool MazeSolver::isTargetDetectedIR()
         }
     }
     return false;
+}
+
+bool MazeSolver::inBounds(int x, int y)
+{
+    return (x >= 0 && x <= MAZE_SIZE && y >= 0 && y <= MAZE_SIZE);
+}
+
+byte MazeSolver::wallBit(Direction d)
+{
+    switch (d)
+    {
+    case NORTH:
+        return WALL_NORTH;
+    case EAST:
+        return WALL_EAST;
+    case SOUTH:
+        return WALL_SOUTH;
+    case WEST:
+        return WALL_WEST;
+    }
+    return 0;
+}
+
+bool MazeSolver::getUnvisitedNeighborDirDFS(Direction &outDir)
+{
+    Direction order[4] = {
+        (Direction)((currDir + 3) % 4), // Left
+        currDir,                        // Front
+        (Direction)((currDir + 1) % 4), // Right
+        (Direction)((currDir + 2) % 4)  // Back
+    };
+
+    for (int i = 0; i < 4; i++)
+    {
+        Direction d = order[i];
+
+        // blocked by wall?
+        if (walls[currX][currY] & wallBit(d))
+            continue;
+
+        int nx = currX, ny = currY;
+        if (d == NORTH)
+            ny++;
+        else if (d == EAST)
+            nx++;
+        else if (d == SOUTH)
+            ny--;
+        else if (d == WEST)
+            nx--;
+
+        if (!inBounds(nx, ny))
+            continue;
+
+        if (!dfsSeen[nx][ny])
+        {
+            outDir = d;
+            return true;
+        }
+    }
+    return false;
+}
+
+void MazeSolver::moveAbsDirAndUpdatePose(Direction absDir)
+{
+    turnTo(absDir);
+    moveOneCell();
+
+    // Update coordinates based on final direction
+    if (currDir == NORTH)
+        currY++;
+    else if (currDir == EAST)
+        currX++;
+    else if (currDir == SOUTH)
+        currY--;
+    else if (currDir == WEST)
+        currX--;
+
+    // Keep your visited grid for printing
+    visited[currX][currY] = (currX * 10) + currY;
+}
+
+void MazeSolver::dfsInit()
+{
+    dfsDone = false;
+    dfsTop = -1;
+
+    for (int x = 0; x <= MAZE_SIZE; x++)
+    {
+        for (int y = 0; y <= MAZE_SIZE; y++)
+        {
+            dfsSeen[x][y] = false;
+            dfsBackDir[x][y] = NORTH;
+        }
+    }
+
+    // Start cell
+    dfsSeen[currX][currY] = true;
+    visited[currX][currY] = (currX * 10) + currY;
+
+    dfsStack[++dfsTop] = {(byte)currX, (byte)currY};
+
+    Serial.println("DFS INIT at (" + String(currX) + "," + String(currY) + ")");
+}
+
+bool MazeSolver::dfsFinished()
+{
+    return dfsDone;
 }
 
 // --- Flood Fill Implementation ---
@@ -262,9 +404,11 @@ void MazeSolver::updateWalls()
     //     walls[currX - 1][currY] |= WALL_EAST;
 
     Serial.println("Full maze:");
-    for (int x = 0; x <= MAZE_SIZE; x++) {
+    for (int x = 0; x <= MAZE_SIZE; x++)
+    {
         String row = "";
-        for (int y = 0; y <= MAZE_SIZE; y++) {
+        for (int y = 0; y <= MAZE_SIZE; y++)
+        {
             row += String(walls[x][y], BIN) + " ";
         }
         Serial.println("row: " + row);
@@ -289,47 +433,48 @@ Direction MazeSolver::getBestDirection()
     // Bit 2: Front wall, Bit 1: Left wall, Bit 0: Right wall
     int wallConfig = (wallFront << 2) | (wallLeft << 1) | wallRight;
 
-    switch (wallConfig) {
-        
-        case 0b110:  
+    switch (wallConfig)
+    {
+
+    case 0b110:
         bestDir = (Direction)((currDir + 1) % 4);
         Serial.println("Decision: FORCED RIGHT (front & left blocked)");
         break;
-        
-        case 0b101: 
+
+    case 0b101:
         bestDir = (Direction)((currDir + 3) % 4);
         Serial.println("Decision: FORCED LEFT (front & right blocked)");
         break;
-        
-        case 0b011:  
+
+    case 0b011:
         bestDir = currDir;
         Serial.println("Decision: CORRIDOR → Straight");
         break;
-        
-        case 0b001:  
-        bestDir = (Direction)((currDir + 3) % 4);  
+
+    case 0b001:
+        bestDir = (Direction)((currDir + 3) % 4);
         Serial.println("Decision: L-T-JUNCTION () → turn left");
         break;
-        
-        case 0b010: 
+
+    case 0b010:
         bestDir = (Direction)((currDir + 1) % 4);
         Serial.println("Decision: L-JUNCTION () → right ");
         break;
-        
-        case 0b111: 
-            bestDir = (Direction)((currDir + 2) % 4);
-            Serial.println("Decision: DEAD END → U-Turn");
-            break;
-            
-        case 0b000:  
-            bestDir = (Direction)((currDir + 3) % 4); 
-            Serial.println("Decision: CROSSROADS → Left (left-hand rule)");
-            break;
 
-        case 0b100: 
-            bestDir = (Direction)((currDir + 3) % 4); 
-            Serial.println("Decision: T-JUNCTION → Left (left-hand rule)");
-            break;
+    case 0b111:
+        bestDir = (Direction)((currDir + 2) % 4);
+        Serial.println("Decision: DEAD END → U-Turn");
+        break;
+
+    case 0b000:
+        bestDir = (Direction)((currDir + 3) % 4);
+        Serial.println("Decision: CROSSROADS → Left (left-hand rule)");
+        break;
+
+    case 0b100:
+        bestDir = (Direction)((currDir + 3) % 4);
+        Serial.println("Decision: T-JUNCTION → Left (left-hand rule)");
+        break;
 
         // default:  // Should never reach here, but safety fallback
         //     if (!wallLeft) {
@@ -455,18 +600,19 @@ void MazeSolver::reset()
             visited[x][y] = 0;
         }
     }
-    visited[0][0] = (0 * 10) + 0;  // Mark starting position
+    visited[0][0] = (0 * 10) + 0; // Mark starting position
     pathLen = 0;
     pathIndex = 0;
-    
+
     // Clear EEPROM by invalidating magic byte
     EEPROM.write(EEPROM_MAGIC_ADDR, 0x00);
-    
+
     // Optionally clear all EEPROM data
-    for (int addr = 0; addr < 132; addr++) {
+    for (int addr = 0; addr < 132; addr++)
+    {
         EEPROM.write(addr, 0);
     }
-    
+
     Serial.println("EEPROM cleared and system reset!");
     stopMotors();
 }
@@ -494,7 +640,8 @@ void MazeSolver::turnTo(Direction targetDir)
     currDir = targetDir;
 }
 
-void MazeSolver::moveOneCell() {
+void MazeSolver::moveOneCell()
+{
     encZero();
     leftMotor.setDirection(true);
     rightMotor.setDirection(true);
@@ -504,7 +651,8 @@ void MazeSolver::moveOneCell() {
     float correction = 0.0f;
 
     float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
-    if (frontDist > 0 && frontDist < 5.0) {
+    if (frontDist > 0 && frontDist < 5.0)
+    {
         Serial.println("Breaking [Before]");
         return;
     }
@@ -555,7 +703,8 @@ void MazeSolver::moveOneCell() {
 
         // Safety: If too close to front wall, stop early
         float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
-        if (frontDist > 0 && frontDist < 3.50) {
+        if (frontDist > 0 && frontDist < 3.50)
+        {
             Serial.println("Breaking [After]");
             break;
         }
@@ -565,13 +714,15 @@ void MazeSolver::moveOneCell() {
     stopMotors();
 }
 
-void MazeSolver::turnLeft(){
+void MazeSolver::turnLeft()
+{
     encZero();
     leftMotor.setDirection(false);
     rightMotor.setDirection(true);
     leftMotor.setSpeed(TURN_SPEED);
     rightMotor.setSpeed(TURN_SPEED);
-    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_90);
+    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_90)
+        ;
     stopMotors();
 }
 
@@ -587,7 +738,8 @@ void MazeSolver::turnRight()
     stopMotors();
 }
 
-void MazeSolver::turnAround(){
+void MazeSolver::turnAround()
+{
     // turnRight();
     // delay(200);
     // turnRight();
@@ -622,6 +774,7 @@ float MazeSolver::readSensor(int trig, int echo)
 
 long MazeSolver::encLeft() { return leftMotor.getEncoderCount(); }
 long MazeSolver::encRight() { return rightMotor.getEncoderCount(); }
+
 void MazeSolver::encZero()
 {
     leftMotor.resetEncoder();
@@ -637,185 +790,220 @@ void MazeSolver::encZero()
 // Address 130: currDir (1 byte)
 // Address 131: magic byte (0xAA = valid data saved)
 
-void MazeSolver::saveMazeToEEPROM() {
+void MazeSolver::saveMazeToEEPROM()
+{
     Serial.println("\n=== Saving Maze to EEPROM ===");
-    
+
     // Save walls array (64 bytes)
     int addr = EEPROM_START_ADDR;
-    for (int x = 0; x <= MAZE_SIZE; x++) {
-        for (int y = 0; y <= MAZE_SIZE; y++) {
+    for (int x = 0; x <= MAZE_SIZE; x++)
+    {
+        for (int y = 0; y <= MAZE_SIZE; y++)
+        {
             EEPROM.write(addr++, walls[x][y]);
         }
     }
-    
+
     // Save visited array (64 bytes)
     addr = EEPROM_VISITED_ADDR;
-    for (int x = 0; x <= MAZE_SIZE; x++) {
-        for (int y = 0; y <= MAZE_SIZE; y++) {
+    for (int x = 0; x <= MAZE_SIZE; x++)
+    {
+        for (int y = 0; y <= MAZE_SIZE; y++)
+        {
             EEPROM.write(addr++, visited[x][y]);
         }
     }
-    
+
     // Save robot position and direction
     EEPROM.write(EEPROM_ROBOT_POS_ADDR, currX);
     EEPROM.write(EEPROM_ROBOT_POS_ADDR + 1, currY);
     EEPROM.write(EEPROM_ROBOT_POS_ADDR + 2, currDir);
-    
+
     // Write magic byte to indicate valid data
     EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC_VALUE);
-    
+
     Serial.println("Maze saved successfully!");
     Serial.println("Final Position: X=" + String(currX) + " Y=" + String(currY) + " Dir=" + String(currDir));
 }
 
-void MazeSolver::loadMazeFromEEPROM() {
+void MazeSolver::loadMazeFromEEPROM()
+{
     // Check if valid data exists
-    if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC_VALUE) {
+    if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC_VALUE)
+    {
         Serial.println("No saved maze found in EEPROM!");
         return;
     }
-    
+
     Serial.println("\n=== Loading Maze from EEPROM ===");
-    
+
     // Load walls array
     int addr = EEPROM_START_ADDR;
-    for (int x = 0; x <= MAZE_SIZE; x++) {
-        for (int y = 0; y <= MAZE_SIZE; y++) {
+    for (int x = 0; x <= MAZE_SIZE; x++)
+    {
+        for (int y = 0; y <= MAZE_SIZE; y++)
+        {
             walls[x][y] = EEPROM.read(addr++);
         }
     }
-    
+
     // Load visited array
     addr = EEPROM_VISITED_ADDR;
-    for (int x = 0; x <= MAZE_SIZE; x++) {
-        for (int y = 0; y <=    MAZE_SIZE; y++) {
+    for (int x = 0; x <= MAZE_SIZE; x++)
+    {
+        for (int y = 0; y <= MAZE_SIZE; y++)
+        {
             visited[x][y] = EEPROM.read(addr++);
         }
     }
-    
+
     // Load robot position and direction
     currX = EEPROM.read(EEPROM_ROBOT_POS_ADDR);
     currY = EEPROM.read(EEPROM_ROBOT_POS_ADDR + 1);
     currDir = (Direction)EEPROM.read(EEPROM_ROBOT_POS_ADDR + 2);
-    
+
     Serial.println("Maze loaded successfully!");
     Serial.println("Final Position: X=" + String(currX) + " Y=" + String(currY) + " Dir=" + String(currDir));
 }
 
-void MazeSolver::printSavedMaze() {
+void MazeSolver::printSavedMaze()
+{
     // Check if valid data exists
-    if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC_VALUE) {
+    if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC_VALUE)
+    {
         Serial.println("No saved maze found in EEPROM!");
         return;
     }
-    
+
     Serial.println("\n╔════════════════════════════════════════╗");
     Serial.println("║        SAVED MAZE MAP (EEPROM)        ║");
     Serial.println("╚════════════════════════════════════════╝\n");
-    
+
     // Print final robot position
     byte savedX = EEPROM.read(EEPROM_ROBOT_POS_ADDR);
     byte savedY = EEPROM.read(EEPROM_ROBOT_POS_ADDR + 1);
     byte savedDir = EEPROM.read(EEPROM_ROBOT_POS_ADDR + 2);
-    
+
     Serial.println("Robot Final Position:");
     Serial.println("  X: " + String(savedX) + " | Y: " + String(savedY));
     String dirName[] = {"NORTH", "EAST", "SOUTH", "WEST"};
     Serial.println("  Direction: " + dirName[savedDir]);
-    
+
     Serial.println("\n────────────────────────────────────────");
     Serial.println("Maze Walls (N=North, E=East, S=South, W=West):\n");
-    
+
     // Print column headers
     Serial.print("    ");
-    for (int y = 0; y <= MAZE_SIZE; y++) {
+    for (int y = 0; y <= MAZE_SIZE; y++)
+    {
         Serial.print("Y" + String(y) + "   ");
     }
     Serial.println();
-    
+
     // Print maze row by row
-    for (int x = 0; x <= MAZE_SIZE; x++) {
+    for (int x = 0; x <= MAZE_SIZE; x++)
+    {
         Serial.print("X" + String(x) + " ");
-        
-        for (int y = 0; y <= MAZE_SIZE; y++) {
-            int addr = EEPROM_START_ADDR + (x * (MAZE_SIZE+1)) + y;
+
+        for (int y = 0; y <= MAZE_SIZE; y++)
+        {
+            int addr = EEPROM_START_ADDR + (x * (MAZE_SIZE + 1)) + y;
             byte wallByte = EEPROM.read(addr);
-            
+
             // Build wall string (show which walls exist)
             String wallStr = "";
-            if (wallByte & WALL_NORTH) wallStr += "N";
-            if (wallByte & WALL_EAST)  wallStr += "E";
-            if (wallByte & WALL_SOUTH) wallStr += "S";
-            if (wallByte & WALL_WEST)  wallStr += "W";
-            
-            if (wallStr == "") wallStr = "----";
-            
+            if (wallByte & WALL_NORTH)
+                wallStr += "N";
+            if (wallByte & WALL_EAST)
+                wallStr += "E";
+            if (wallByte & WALL_SOUTH)
+                wallStr += "S";
+            if (wallByte & WALL_WEST)
+                wallStr += "W";
+
+            if (wallStr == "")
+                wallStr = "----";
+
             // Pad to 5 characters for alignment
-            while (wallStr.length() < 4) wallStr += " ";
+            while (wallStr.length() < 4)
+                wallStr += " ";
             Serial.print(wallStr + " ");
         }
         Serial.println();
     }
-    
+
     Serial.println("\n────────────────────────────────────────");
     Serial.println("Binary Wall Data (NESW bits):\n");
-    
+
     // Print binary representation
     Serial.print("    ");
-    for (int y = 0; y <=MAZE_SIZE; y++) {
+    for (int y = 0; y <= MAZE_SIZE; y++)
+    {
         Serial.print("  Y" + String(y) + "  ");
     }
     Serial.println();
-    
-    for (int x = 0; x <= MAZE_SIZE; x++) {
+
+    for (int x = 0; x <= MAZE_SIZE; x++)
+    {
         Serial.print("X" + String(x) + " ");
-        for (int y = 0; y <= MAZE_SIZE; y++) {
-            int addr = EEPROM_START_ADDR + (x * (MAZE_SIZE+1)) + y;
+        for (int y = 0; y <= MAZE_SIZE; y++)
+        {
+            int addr = EEPROM_START_ADDR + (x * (MAZE_SIZE + 1)) + y;
             byte wallByte = EEPROM.read(addr);
-            
+
             // Print as 4-bit binary
             String binary = "";
-            for (int bit = 3; bit >= 0; bit--) {
+            for (int bit = 3; bit >= 0; bit--)
+            {
                 binary += (wallByte & (1 << bit)) ? "1" : "0";
             }
             Serial.print(binary + "  ");
         }
         Serial.println();
     }
-    
+
     Serial.println("\n────────────────────────────────────────");
     Serial.println("Robot Path (Visited Positions):\n");
-    
+
     // Print visited positions grid
     Serial.print("    ");
-    for (int y = 0; y <= MAZE_SIZE; y++) {
+    for (int y = 0; y <= MAZE_SIZE; y++)
+    {
         Serial.print("Y" + String(y) + " ");
     }
     Serial.println();
-    
-    for (int x = 0; x <= MAZE_SIZE; x++) {
+
+    for (int x = 0; x <= MAZE_SIZE; x++)
+    {
         Serial.print("X" + String(x) + "  ");
-        for (int y = 0; y <= MAZE_SIZE; y++) {
-            int addr = EEPROM_VISITED_ADDR + (x * (MAZE_SIZE+1)) + y;
+        for (int y = 0; y <= MAZE_SIZE; y++)
+        {
+            int addr = EEPROM_VISITED_ADDR + (x * (MAZE_SIZE + 1)) + y;
             byte posValue = EEPROM.read(addr);
-            
-            if (posValue > 0) {
+
+            if (posValue > 0)
+            {
                 // Display the stored position value (e.g., 56 for X=5, Y=6)
-                if (posValue < 10) {
+                if (posValue < 10)
+                {
                     Serial.print(" " + String(posValue) + " ");
-                } else {
+                }
+                else
+                {
                     Serial.print(String(posValue) + " ");
                 }
-            } else {
-                Serial.print(" - ");  // Not visited
+            }
+            else
+            {
+                Serial.print(" - "); // Not visited
             }
         }
         Serial.println();
     }
-    
+
     Serial.println("\nNote: Each cell shows its position (XY format, e.g., 56 = X5,Y6)");
     Serial.println("      '-' means the cell was not visited");
-    
+
     Serial.println("\n╔════════════════════════════════════════╗");
     Serial.println("║            END OF MAZE MAP             ║");
     Serial.println("╚════════════════════════════════════════╝\n");
