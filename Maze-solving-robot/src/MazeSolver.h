@@ -13,16 +13,16 @@
 #define US_RIGHT_ECHO 36
 
 // --- Calibration Constants (TUNE THESE) ---
-#define BASE_SPEED      60
-#define TURN_SPEED      70
+#define BASE_SPEED      70
+#define TURN_SPEED      100
 #define WALL_THRESHOLD  15.0f
 #define COUNTS_PER_90   250L 
 #define COUNTS_PER_180  470L
-#define COUNTS_PER_CELL 515L   //525L
+#define COUNTS_PER_CELL 530L   //525L
 
 // --- PD Wall Following constants ---
-const float KP = 2.2;
-const float KD = 0.0; 
+const float KP = 2.3;
+const float KD = 0.1; 
 const float DESIRED_WALL_DISTANCE = 7.5;
 
 
@@ -55,13 +55,6 @@ public:
     bool isFinished();
     bool isTargetDetectedIR();
     void reset();
-    void computeShortestPath();
-    void followShortestPathStep();
-    
-    // EEPROM Functions
-    void saveMazeToEEPROM();
-    void loadMazeFromEEPROM();
-    void printSavedMaze();
 
 private:
     MotorPID& leftMotor;
@@ -74,20 +67,12 @@ private:
     
     // The Map
     byte walls[MAZE_SIZE+1][MAZE_SIZE+1];
-    int  dist[MAZE_SIZE+1][MAZE_SIZE+1];
     byte visited[MAZE_SIZE+1][MAZE_SIZE+1];  // Track visited positions
-
-    // Shortest path storage
-    Direction path[MAZE_SIZE * MAZE_SIZE];
-    int pathLen;
-    int pathIndex;
 
     // Helper Functions
     float readSensor(int trig, int echo);
     void  updateWalls();
-    void  floodFill();
     Direction getBestDirection();
-    Direction getBestDirectionAt(int x, int y);
     
     // Movement Primitives
     void turnTo(Direction targetDir);

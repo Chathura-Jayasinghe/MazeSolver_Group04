@@ -1,17 +1,4 @@
 #include "MazeSolver.h"
-#include <EEPROM.h>
-
-// EEPROM Memory Layout Constants
-// With 9x9 arrays (81 bytes each):
-// Walls:   0-80    (81 bytes)
-// Visited: 81-161  (81 bytes)
-// Robot position: 162-164 (3 bytes: X, Y, Dir)
-// Magic byte: 165
-#define EEPROM_START_ADDR 0
-#define EEPROM_VISITED_ADDR 81
-#define EEPROM_ROBOT_POS_ADDR 162
-#define EEPROM_MAGIC_ADDR 165
-#define EEPROM_MAGIC_VALUE 0xAA
 
 MazeSolver::MazeSolver(MotorPID &left, MotorPID &right)
     : leftMotor(left), rightMotor(right)
@@ -22,22 +9,18 @@ MazeSolver::MazeSolver(MotorPID &left, MotorPID &right)
     currY = 0;
     currDir = NORTH;
 
-    // Initialize Map: No walls (0), Unknown distance (255)
+    // Initialize Map: No walls (0)
     for (int x = 0; x <= MAZE_SIZE; x++)
     {
         for (int y = 0; y <= MAZE_SIZE; y++)
         {
             walls[x][y] = 0;
-            dist[x][y] = 255;
             visited[x][y] = 0;  // Not visited yet
         }
     }
     
     // Mark starting position with its coordinates (0,0 = 00)
     visited[0][0] = (0 * 10) + 0;
-
-    pathLen = 0;
-    pathIndex = 0;
 }
 
 void MazeSolver::begin()
@@ -62,7 +45,6 @@ void MazeSolver::begin()
 void MazeSolver::runStep()
 {
     updateWalls();
-    saveMazeToEEPROM();
 
     Serial.println("Full maze:");
     for (int x = 0; x <= MAZE_SIZE; x++) {
@@ -83,20 +65,17 @@ void MazeSolver::runStep()
         return; // DONE!
     }
 
-    // 3. Recalculate Distances (Flood Fill)
-    // floodFill();
-
-    // 4. Decide Best Move
+    // 3. Decide Best Move
     Direction nextDir = getBestDirection();
     Serial.println("Next Direction: " + String(nextDir) + " from Current Direction: " + String(currDir));
     Serial.println("==============================================================\n");
 
-    // 5. Execute Move
+    // 4. Execute Move
     delay(1000);
     turnTo(nextDir);
     moveOneCell();
 
-    // 6. Update Virtual Coordinates
+    // 5. Update Virtual Coordinates
     if (currDir == NORTH)
         currY++;
     else if (currDir == EAST)
@@ -135,74 +114,6 @@ bool MazeSolver::isTargetDetectedIR()
         }
     }
     return false;
-}
-
-// --- Flood Fill Implementation ---
-void MazeSolver::floodFill()
-{
-    // Reset distances
-    for (int x = 0; x <= MAZE_SIZE; x++)
-    {
-        for (int y = 0; y <= MAZE_SIZE; y++)
-        {
-            dist[x][y] = 255;
-        }
-    }
-
-    // Queue for BFS (Circular buffer)
-    struct Point
-    {
-        int x, y;
-    };
-    Point queue[MAZE_SIZE * MAZE_SIZE];
-    int head = 0, tail = 0;
-
-    // Start at Target
-    dist[TARGET_X][TARGET_Y] = 0;
-    queue[tail++] = {TARGET_X, TARGET_Y};
-
-    while (head != tail)
-    {
-        Point p = queue[head++];
-        int d = dist[p.x][p.y];
-
-        // Check North Neighbor (x, y+1)
-        if (p.y <= MAZE_SIZE - 1 && !(walls[p.x][p.y] & WALL_NORTH))
-        {
-            if (dist[p.x][p.y + 1] == 255)
-            {
-                dist[p.x][p.y + 1] = d + 1;
-                queue[tail++] = {p.x, p.y + 1};
-            }
-        }
-        // Check East Neighbor (x+1, y)
-        if (p.x <= MAZE_SIZE - 1 && !(walls[p.x][p.y] & WALL_EAST))
-        {
-            if (dist[p.x + 1][p.y] == 255)
-            {
-                dist[p.x + 1][p.y] = d + 1;
-                queue[tail++] = {p.x + 1, p.y};
-            }
-        }
-        // Check South Neighbor (x, y-1)
-        if (p.y > 0 && !(walls[p.x][p.y] & WALL_SOUTH))
-        {
-            if (dist[p.x][p.y - 1] == 255)
-            {
-                dist[p.x][p.y - 1] = d + 1;
-                queue[tail++] = {p.x, p.y - 1};
-            }
-        }
-        // Check West Neighbor (x-1, y)
-        if (p.x > 0 && !(walls[p.x][p.y] & WALL_WEST))
-        {
-            if (dist[p.x - 1][p.y] == 255)
-            {
-                dist[p.x - 1][p.y] = d + 1;
-                queue[tail++] = {p.x - 1, p.y};
-            }
-        }
-    }
 }
 
 // --- Mapping & Sensors ---
@@ -344,102 +255,6 @@ Direction MazeSolver::getBestDirection()
     return bestDir;
 }
 
-Direction MazeSolver::getBestDirectionAt(int x, int y)
-{
-    int minDist = 255;
-    Direction bestDir = NORTH;
-
-    if (y <= MAZE_SIZE - 1 && !(walls[x][y] & WALL_NORTH))
-    {
-        if (dist[x][y + 1] < minDist)
-        {
-            minDist = dist[x][y + 1];
-            bestDir = NORTH;
-        }
-    }
-    if (x <= MAZE_SIZE - 1 && !(walls[x][y] & WALL_EAST))
-    {
-        if (dist[x + 1][y] < minDist)
-        {
-            minDist = dist[x + 1][y];
-            bestDir = EAST;
-        }
-    }
-    if (y > 0 && !(walls[x][y] & WALL_SOUTH))
-    {
-        if (dist[x][y - 1] < minDist)
-        {
-            minDist = dist[x][y - 1];
-            bestDir = SOUTH;
-        }
-    }
-    if (x > 0 && !(walls[x][y] & WALL_WEST))
-    {
-        if (dist[x - 1][y] < minDist)
-        {
-            minDist = dist[x - 1][y];
-            bestDir = WEST;
-        }
-    }
-    return bestDir;
-}
-
-void MazeSolver::computeShortestPath()
-{
-    // Recompute flood fill distances first
-    floodFill();
-
-    // Build path from start (0,0) to target using decreasing dist
-    int x = 0, y = 0;
-    Direction d;
-    pathLen = 0;
-    pathIndex = 0;
-
-    // Guard: if start unreachable, keep empty path
-    if (dist[x][y] == 255)
-        return;
-
-    // Limit steps to grid size to avoid infinite loops
-    for (int steps = 0; steps <= MAZE_SIZE * MAZE_SIZE; steps++)
-    {
-        if (x == TARGET_X && y == TARGET_Y)
-            break;
-        d = getBestDirectionAt(x, y);
-        path[pathLen++] = d;
-        // advance virtual position
-        if (d == NORTH)
-            y++;
-        else if (d == EAST)
-            x++;
-        else if (d == SOUTH)
-            y--;
-        else if (d == WEST)
-            x--;
-    }
-}
-
-void MazeSolver::followShortestPathStep()
-{
-    if (pathIndex >= pathLen)
-    {
-        stopMotors();
-        return;
-    }
-    Direction nextDir = path[pathIndex];
-    turnTo(nextDir);
-    moveOneCell();
-    if (currDir == NORTH)
-        currY++;
-    else if (currDir == EAST)
-        currX++;
-    else if (currDir == SOUTH)
-        currY--;
-    else if (currDir == WEST)
-        currX--;
-    stopMotors();
-    pathIndex++;
-}
-
 void MazeSolver::reset()
 {
     // Reset robot pose and map
@@ -451,23 +266,12 @@ void MazeSolver::reset()
         for (int y = 0; y <= MAZE_SIZE; y++)
         {
             walls[x][y] = 0;
-            dist[x][y] = 255;
             visited[x][y] = 0;
         }
     }
     visited[0][0] = (0 * 10) + 0;  // Mark starting position
-    pathLen = 0;
-    pathIndex = 0;
     
-    // Clear EEPROM by invalidating magic byte
-    EEPROM.write(EEPROM_MAGIC_ADDR, 0x00);
-    
-    // Optionally clear all EEPROM data
-    for (int addr = 0; addr < 132; addr++) {
-        EEPROM.write(addr, 0);
-    }
-    
-    Serial.println("EEPROM cleared and system reset!");
+    Serial.println("System reset complete!");
     stopMotors();
 }
 
@@ -519,7 +323,9 @@ void MazeSolver::moveOneCell() {
             break;
 
         float rightDist = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
+        delay(15);
         float leftDist = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
+        delay(15);
 
         bool rightWallExists = (rightDist > 0 && rightDist < WALL_THRESHOLD * 1.2);
         bool leftWallExists = (leftDist > 0 && leftDist < WALL_THRESHOLD * 1.2);
@@ -542,13 +348,14 @@ void MazeSolver::moveOneCell() {
         }
 
         correction = KP * error + KD * (error - lastError);
+        correction = constrain(correction, -30, 30);
         lastError = error;
 
         int leftSpeed = BASE_SPEED - correction;
         int rightSpeed = BASE_SPEED + correction;
 
-        leftSpeed = constrain(leftSpeed, 0, 200);
-        rightSpeed = constrain(rightSpeed, 0, 200);
+        leftSpeed = constrain(leftSpeed, 40, 200);
+        rightSpeed = constrain(rightSpeed, 40, 200);
 
         leftMotor.setSpeed(leftSpeed);
         rightMotor.setSpeed(rightSpeed);
@@ -582,15 +389,11 @@ void MazeSolver::turnRight()
     rightMotor.setDirection(false);
     leftMotor.setSpeed(TURN_SPEED);
     rightMotor.setSpeed(TURN_SPEED);
-    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_90)
-        ;
+    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_90);
     stopMotors();
 }
 
 void MazeSolver::turnAround(){
-    // turnRight();
-    // delay(200);
-    // turnRight();
     encZero();
     leftMotor.setDirection(true);
     rightMotor.setDirection(false);
@@ -626,197 +429,4 @@ void MazeSolver::encZero()
 {
     leftMotor.resetEncoder();
     rightMotor.resetEncoder();
-}
-
-// ==================== EEPROM Functions ====================
-// EEPROM Memory Layout:
-// Address 0-63: walls[8][8] array (64 bytes)
-// Address 64-127: visited[8][8] array (64 bytes)
-// Address 128: currX (1 byte)
-// Address 129: currY (1 byte)
-// Address 130: currDir (1 byte)
-// Address 131: magic byte (0xAA = valid data saved)
-
-void MazeSolver::saveMazeToEEPROM() {
-    Serial.println("\n=== Saving Maze to EEPROM ===");
-    
-    // Save walls array (64 bytes)
-    int addr = EEPROM_START_ADDR;
-    for (int x = 0; x <= MAZE_SIZE; x++) {
-        for (int y = 0; y <= MAZE_SIZE; y++) {
-            EEPROM.write(addr++, walls[x][y]);
-        }
-    }
-    
-    // Save visited array (64 bytes)
-    addr = EEPROM_VISITED_ADDR;
-    for (int x = 0; x <= MAZE_SIZE; x++) {
-        for (int y = 0; y <= MAZE_SIZE; y++) {
-            EEPROM.write(addr++, visited[x][y]);
-        }
-    }
-    
-    // Save robot position and direction
-    EEPROM.write(EEPROM_ROBOT_POS_ADDR, currX);
-    EEPROM.write(EEPROM_ROBOT_POS_ADDR + 1, currY);
-    EEPROM.write(EEPROM_ROBOT_POS_ADDR + 2, currDir);
-    
-    // Write magic byte to indicate valid data
-    EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC_VALUE);
-    
-    Serial.println("Maze saved successfully!");
-    Serial.println("Final Position: X=" + String(currX) + " Y=" + String(currY) + " Dir=" + String(currDir));
-}
-
-void MazeSolver::loadMazeFromEEPROM() {
-    // Check if valid data exists
-    if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC_VALUE) {
-        Serial.println("No saved maze found in EEPROM!");
-        return;
-    }
-    
-    Serial.println("\n=== Loading Maze from EEPROM ===");
-    
-    // Load walls array
-    int addr = EEPROM_START_ADDR;
-    for (int x = 0; x <= MAZE_SIZE; x++) {
-        for (int y = 0; y <= MAZE_SIZE; y++) {
-            walls[x][y] = EEPROM.read(addr++);
-        }
-    }
-    
-    // Load visited array
-    addr = EEPROM_VISITED_ADDR;
-    for (int x = 0; x <= MAZE_SIZE; x++) {
-        for (int y = 0; y <=    MAZE_SIZE; y++) {
-            visited[x][y] = EEPROM.read(addr++);
-        }
-    }
-    
-    // Load robot position and direction
-    currX = EEPROM.read(EEPROM_ROBOT_POS_ADDR);
-    currY = EEPROM.read(EEPROM_ROBOT_POS_ADDR + 1);
-    currDir = (Direction)EEPROM.read(EEPROM_ROBOT_POS_ADDR + 2);
-    
-    Serial.println("Maze loaded successfully!");
-    Serial.println("Final Position: X=" + String(currX) + " Y=" + String(currY) + " Dir=" + String(currDir));
-}
-
-void MazeSolver::printSavedMaze() {
-    // Check if valid data exists
-    if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC_VALUE) {
-        Serial.println("No saved maze found in EEPROM!");
-        return;
-    }
-    
-    Serial.println("\n╔════════════════════════════════════════╗");
-    Serial.println("║        SAVED MAZE MAP (EEPROM)        ║");
-    Serial.println("╚════════════════════════════════════════╝\n");
-    
-    // Print final robot position
-    byte savedX = EEPROM.read(EEPROM_ROBOT_POS_ADDR);
-    byte savedY = EEPROM.read(EEPROM_ROBOT_POS_ADDR + 1);
-    byte savedDir = EEPROM.read(EEPROM_ROBOT_POS_ADDR + 2);
-    
-    Serial.println("Robot Final Position:");
-    Serial.println("  X: " + String(savedX) + " | Y: " + String(savedY));
-    String dirName[] = {"NORTH", "EAST", "SOUTH", "WEST"};
-    Serial.println("  Direction: " + dirName[savedDir]);
-    
-    Serial.println("\n────────────────────────────────────────");
-    Serial.println("Maze Walls (N=North, E=East, S=South, W=West):\n");
-    
-    // Print column headers
-    Serial.print("    ");
-    for (int y = 0; y <= MAZE_SIZE; y++) {
-        Serial.print("Y" + String(y) + "   ");
-    }
-    Serial.println();
-    
-    // Print maze row by row
-    for (int x = 0; x <= MAZE_SIZE; x++) {
-        Serial.print("X" + String(x) + " ");
-        
-        for (int y = 0; y <= MAZE_SIZE; y++) {
-            int addr = EEPROM_START_ADDR + (x * (MAZE_SIZE+1)) + y;
-            byte wallByte = EEPROM.read(addr);
-            
-            // Build wall string (show which walls exist)
-            String wallStr = "";
-            if (wallByte & WALL_NORTH) wallStr += "N";
-            if (wallByte & WALL_EAST)  wallStr += "E";
-            if (wallByte & WALL_SOUTH) wallStr += "S";
-            if (wallByte & WALL_WEST)  wallStr += "W";
-            
-            if (wallStr == "") wallStr = "----";
-            
-            // Pad to 5 characters for alignment
-            while (wallStr.length() < 4) wallStr += " ";
-            Serial.print(wallStr + " ");
-        }
-        Serial.println();
-    }
-    
-    Serial.println("\n────────────────────────────────────────");
-    Serial.println("Binary Wall Data (NESW bits):\n");
-    
-    // Print binary representation
-    Serial.print("    ");
-    for (int y = 0; y <=MAZE_SIZE; y++) {
-        Serial.print("  Y" + String(y) + "  ");
-    }
-    Serial.println();
-    
-    for (int x = 0; x <= MAZE_SIZE; x++) {
-        Serial.print("X" + String(x) + " ");
-        for (int y = 0; y <= MAZE_SIZE; y++) {
-            int addr = EEPROM_START_ADDR + (x * (MAZE_SIZE+1)) + y;
-            byte wallByte = EEPROM.read(addr);
-            
-            // Print as 4-bit binary
-            String binary = "";
-            for (int bit = 3; bit >= 0; bit--) {
-                binary += (wallByte & (1 << bit)) ? "1" : "0";
-            }
-            Serial.print(binary + "  ");
-        }
-        Serial.println();
-    }
-    
-    Serial.println("\n────────────────────────────────────────");
-    Serial.println("Robot Path (Visited Positions):\n");
-    
-    // Print visited positions grid
-    Serial.print("    ");
-    for (int y = 0; y <= MAZE_SIZE; y++) {
-        Serial.print("Y" + String(y) + " ");
-    }
-    Serial.println();
-    
-    for (int x = 0; x <= MAZE_SIZE; x++) {
-        Serial.print("X" + String(x) + "  ");
-        for (int y = 0; y <= MAZE_SIZE; y++) {
-            int addr = EEPROM_VISITED_ADDR + (x * (MAZE_SIZE+1)) + y;
-            byte posValue = EEPROM.read(addr);
-            
-            if (posValue > 0) {
-                // Display the stored position value (e.g., 56 for X=5, Y=6)
-                if (posValue < 10) {
-                    Serial.print(" " + String(posValue) + " ");
-                } else {
-                    Serial.print(String(posValue) + " ");
-                }
-            } else {
-                Serial.print(" - ");  // Not visited
-            }
-        }
-        Serial.println();
-    }
-    
-    Serial.println("\nNote: Each cell shows its position (XY format, e.g., 56 = X5,Y6)");
-    Serial.println("      '-' means the cell was not visited");
-    
-    Serial.println("\n╔════════════════════════════════════════╗");
-    Serial.println("║            END OF MAZE MAP             ║");
-    Serial.println("╚════════════════════════════════════════╝\n");
 }
