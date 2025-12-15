@@ -6,13 +6,10 @@
 MazeSolver::MazeSolver(MotorPID &left, MotorPID &right)
     : leftMotor(left), rightMotor(right)
 {
-
-    // Initialize Robot at (0,0) facing North
     currX = 0;
     currY = 0;
     currDir = NORTH;
 
-    // Initialize Map: No walls (0), Unknown distance (255)
     for (int x = 0; x < MAZE_SIZE; x++)
     {
         for (int y = 0; y < MAZE_SIZE; y++)
@@ -35,7 +32,6 @@ void MazeSolver::begin()
     pinMode(US_RIGHT_TRIG, OUTPUT);
     pinMode(US_RIGHT_ECHO, INPUT);
 
-    // Configure IR sensors same as line follower
     const int irPins[NUM_SENSORS] = {IR1, IR2, IR3, IR4, IR5, IR6, IR7, IR8};
     for (int i = 0; i < NUM_SENSORS; i++)
     {
@@ -47,56 +43,41 @@ void MazeSolver::begin()
 
 void MazeSolver::runStep()
 {
-    // 1. Read Sensors & Update Walls
-    // updateWalls();
-
-    // 2. Check if we reached target
-    // if (currX == TARGET_X && currY == TARGET_Y)
-    // {
-    //     stopMotors();
-    //     return; // DONE!
-    // }
-
-    // 3. Recalculate Distances (Flood Fill)
-    // floodFill();
-
-    // 4. Decide Best Move
+    updateWalls();
+    floodFill();
     Direction nextDir = getBestDirection();
 
-    Serial.println("====================================================================================");
-    Serial.println("Current Position (" + String(currX) + "," + String(currY) + ")");
-    Serial.println("current robot Direction - before turn: " + String(currDir));
-    Serial.println("current cell wall " + String(walls[currX][currY], BIN));
-
-    // 5. Execute Move
     turnTo(nextDir);
     moveOneCell();
-    delay(1000);
+    delay(10);
 
-    Serial.println("Before Turn Next Direction: " + String(nextDir));
-    Serial.println("Move one cell");
-
-    // 6. Update Virtual Coordinates
-    if (currDir == NORTH)
+    if (currDir == NORTH && currY < MAZE_SIZE - 1)
         currY++;
-    else if (currDir == EAST)
+    else if (currDir == EAST && currX < MAZE_SIZE - 1)
         currX++;
-    else if (currDir == SOUTH)
+    else if (currDir == SOUTH && currY > 0)
         currY--;
-    else if (currDir == WEST)
+    else if (currDir == WEST && currX > 0)
         currX--;
 
-    Serial.println("Next Position after move i cell: (" + String(currX) + "," + String(currY) + ")");
-    Serial.println("====================================================================================");
-    Serial.println();
-
     stopMotors();
-    delay(500);
+    delay(10);
+    saveMazeToEEPROM();
 }
 
+void MazeSolver::runStepSmallMaze()
+{
+    Direction nextDir = getBestDirection();
+
+    turnTo(nextDir);
+    moveOneCell(COUNTS_PER_CELL_SMALL);
+    delay(10);
+
+    stopMotors();
+ 
+}
 bool MazeSolver::isFinished()
 {
-    // Finish if coordinates reach target or IR sees white target
     if (currX == TARGET_X && currY == TARGET_Y)
     {
         return true;
@@ -106,7 +87,6 @@ bool MazeSolver::isFinished()
 
 bool MazeSolver::isTargetDetectedIR()
 {
-    // Treat HIGH on any IR sensor as white target detected
     const int irPins[NUM_SENSORS] = {IR1, IR2, IR3, IR4, IR5, IR6, IR7, IR8};
     for (int i = 0; i < NUM_SENSORS; i++)
     {
@@ -118,10 +98,8 @@ bool MazeSolver::isTargetDetectedIR()
     return false;
 }
 
-// --- Flood Fill Implementation ---
 void MazeSolver::floodFill()
 {
-    // Reset distances
     for (int x = 0; x < MAZE_SIZE; x++)
     {
         for (int y = 0; y < MAZE_SIZE; y++)
@@ -130,7 +108,6 @@ void MazeSolver::floodFill()
         }
     }
 
-    // Queue for BFS (Circular buffer)
     struct Point
     {
         int x, y;
@@ -138,7 +115,6 @@ void MazeSolver::floodFill()
     Point queue[MAZE_SIZE * MAZE_SIZE];
     int head = 0, tail = 0;
 
-    // Start at Target
     dist[TARGET_X][TARGET_Y] = 0;
     queue[tail++] = {TARGET_X, TARGET_Y};
 
@@ -147,7 +123,6 @@ void MazeSolver::floodFill()
         Point p = queue[head++];
         int d = dist[p.x][p.y];
 
-        // Check North Neighbor (x, y+1)
         if (p.y < MAZE_SIZE - 1 && !(walls[p.x][p.y] & WALL_NORTH))
         {
             if (dist[p.x][p.y + 1] == 255)
@@ -156,7 +131,6 @@ void MazeSolver::floodFill()
                 queue[tail++] = {p.x, p.y + 1};
             }
         }
-        // Check East Neighbor (x+1, y)
         if (p.x < MAZE_SIZE - 1 && !(walls[p.x][p.y] & WALL_EAST))
         {
             if (dist[p.x + 1][p.y] == 255)
@@ -165,7 +139,6 @@ void MazeSolver::floodFill()
                 queue[tail++] = {p.x + 1, p.y};
             }
         }
-        // Check South Neighbor (x, y-1)
         if (p.y > 0 && !(walls[p.x][p.y] & WALL_SOUTH))
         {
             if (dist[p.x][p.y - 1] == 255)
@@ -174,7 +147,6 @@ void MazeSolver::floodFill()
                 queue[tail++] = {p.x, p.y - 1};
             }
         }
-        // Check West Neighbor (x-1, y)
         if (p.x > 0 && !(walls[p.x][p.y] & WALL_WEST))
         {
             if (dist[p.x - 1][p.y] == 255)
@@ -186,25 +158,34 @@ void MazeSolver::floodFill()
     }
 }
 
-// --- Mapping & Sensors ---
 void MazeSolver::updateWalls()
 {
     float f = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
     float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
     float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
-    Serial.println("Sensor Readings - Front: " + String(f) + " cm, Left: " + String(l) + " cm, Right: " + String(r) + " cm");
+    // Serial.println("Sensor Readings - Front: " + String(f) + " cm, Left: " + String(l) + " cm, Right: " + String(r) + " cm");
 
     bool wallFront = (f > 0 && f < 10);
     bool wallLeft = (l > 0 && l < 10);
     bool wallRight = (r > 0 && r < 8);
 
-    Serial1.println("#################################################################################");
-    Serial1.println();
+    // Serial1.println("#################################################################################");
+    // Serial1.println();
 
-    Serial.print("frontwall -  " + String(wallFront));
-    Serial.print("/ leftwall -  " + String(wallLeft));
-    Serial.println("/ rightwall -  " + String(wallRight));
-    Serial1.println();
+    // Serial.print("frontwall -  " + String(wallFront));
+    // Serial.print("/ leftwall -  " + String(wallLeft));
+    // Serial.println("/ rightwall -  " + String(wallRight));
+    // Serial1.println();
+
+    // Add maze boundary walls
+    if (currX == 0)
+        walls[currX][currY] |= WALL_WEST;
+    if (currX == MAZE_SIZE - 1)
+        walls[currX][currY] |= WALL_EAST;
+    if (currY == 0)
+        walls[currX][currY] |= WALL_SOUTH;
+    if (currY == MAZE_SIZE - 1)
+        walls[currX][currY] |= WALL_NORTH;
 
     // Map Relative (Front/Left/Right) to Absolute (N/E/S/W)
     if (wallFront)
@@ -241,7 +222,6 @@ void MazeSolver::updateWalls()
             walls[currX][currY] |= WALL_SOUTH;
     }
 
-    // Sync neighbors (If I have North wall, neighbor above has South wall)
     if ((walls[currX][currY] & WALL_NORTH) && currY < MAZE_SIZE - 1)
         walls[currX][currY + 1] |= WALL_SOUTH;
     if ((walls[currX][currY] & WALL_EAST) && currX < MAZE_SIZE - 1)
@@ -250,15 +230,6 @@ void MazeSolver::updateWalls()
         walls[currX][currY - 1] |= WALL_NORTH;
     if ((walls[currX][currY] & WALL_WEST) && currX > 0)
         walls[currX - 1][currY] |= WALL_EAST;
-
-    Serial.println("Full maze:");
-    for (int x = 0; x < MAZE_SIZE; x++) {
-        String row = "";
-        for (int y = 0; y < MAZE_SIZE; y++) {
-            row += String(walls[x][y], BIN) + " ";
-        }
-        Serial.println("row: " + row);
-    }
 }
 
 Direction MazeSolver::getBestDirection()
@@ -269,11 +240,22 @@ Direction MazeSolver::getBestDirection()
     float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
     float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
 
-    const float MIN_FORWARD_DISTANCE = 15.0;
+    if (f < 0 && l < 0 && r < 0) {
+        f = 100;
+        l = 100;
+        r = 100;
+    }
 
-    bool wallFront = (f > -2 && f < MIN_FORWARD_DISTANCE);
+    const float MIN_FORWARD_DISTANCE = 12.0;
+
+    bool wallFront = (f > 0 && f < MIN_FORWARD_DISTANCE);
     bool wallLeft = (l > 0 && l < 12);
     bool wallRight = (r > 0 && r < 12);
+
+    if (currDir == NORTH && currY >= MAZE_SIZE - 1) wallFront = true;
+    if (currDir == EAST && currX >= MAZE_SIZE - 1) wallFront = true;
+    if (currDir == SOUTH && currY <= 0) wallFront = true;
+    if (currDir == WEST && currX <= 0) wallFront = true;
 
     int wallConfig = (wallFront << 2) | (wallLeft << 1) | wallRight;
 
@@ -281,42 +263,34 @@ Direction MazeSolver::getBestDirection()
         
         case 0b110:  
         bestDir = (Direction)((currDir + 1) % 4);
-        Serial.println("Decision: FORCED RIGHT (front & left blocked)");
         break;
         
         case 0b101: 
         bestDir = (Direction)((currDir + 3) % 4);
-        Serial.println("Decision: FORCED LEFT (front & right blocked)");
         break;
         
         case 0b011:  
         bestDir = currDir;
-        Serial.println("Decision: CORRIDOR → Straight");
         break;
         
         case 0b001:  
         bestDir = (Direction)((currDir + 3) % 4);  
-        Serial.println("Decision: L-T-JUNCTION () → turn left");
         break;
         
         case 0b010: 
         bestDir = (Direction)((currDir + 1) % 4);
-        Serial.println("Decision: L-JUNCTION () → right ");
         break;
         
         case 0b111: 
             bestDir = (Direction)((currDir + 2) % 4);
-            Serial.println("Decision: DEAD END → U-Turn");
             break;
             
         case 0b000:  
             bestDir = (Direction)((currDir + 3) % 4); 
-            Serial.println("Decision: CROSSROADS → Left (left-hand rule)");
             break;
 
         case 0b100: 
-            bestDir = (Direction)((currDir + 3) % 4); 
-            Serial.println("Decision: T-JUNCTION → Left (left-hand rule)");
+            bestDir = (Direction)((currDir + 3) % 4);
             break;
     }
     return bestDir;
@@ -364,20 +338,16 @@ Direction MazeSolver::getBestDirectionAt(int x, int y)
 
 void MazeSolver::computeShortestPath()
 {
-    // Recompute flood fill distances first
     floodFill();
 
-    // Build path from start (0,0) to target using decreasing dist
     int x = 0, y = 0;
     Direction d;
     pathLen = 0;
     pathIndex = 0;
 
-    // Guard: if start unreachable, keep empty path
     if (dist[x][y] == 255)
         return;
 
-    // Limit steps to grid size to avoid infinite loops
     for (int steps = 0; steps < MAZE_SIZE * MAZE_SIZE; steps++)
     {
         if (x == TARGET_X && y == TARGET_Y)
@@ -420,7 +390,6 @@ void MazeSolver::followShortestPathStep()
 
 void MazeSolver::reset()
 {
-    // Reset robot pose and map
     currX = 0;
     currY = 0;
     currDir = NORTH;
@@ -443,7 +412,6 @@ void MazeSolver::turnTo(Direction targetDir)
 
     if (diff == 0)
     {
-        // Straight - Do nothing
     }
     else if (diff == 1 || diff == -3)
     {
@@ -461,7 +429,7 @@ void MazeSolver::turnTo(Direction targetDir)
     currDir = targetDir;
 }
 
-void MazeSolver::moveOneCell()
+void MazeSolver::moveOneCell(int countsPerCell)
 {
     encZero();
     leftMotor.setDirection(true);
@@ -516,11 +484,11 @@ void MazeSolver::moveOneCell()
         rightMotor.setSpeed(rightSpeed);
 
         // Safety: If too close to front wall, stop early
-        // float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
-        // if (frontDist > 0 && frontDist < 3.0) {
-        //     Serial.println("**************breaking...");
-        //     break;
-        // }
+        float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
+        if (frontDist > 0 && frontDist < 3) {
+            // Serial.println("**************breaking...");
+            break;
+        }
 
         delay(10);
     }
@@ -583,4 +551,149 @@ void MazeSolver::encZero()
 {
     leftMotor.resetEncoder();
     rightMotor.resetEncoder();
+}
+
+void MazeSolver::saveMazeToEEPROM()
+{
+    int addr = 0;
+    
+    EEPROM.update(addr++, currX);
+    EEPROM.update(addr++, currY);
+    EEPROM.update(addr++, (byte)currDir);
+    
+    for (int y = MAZE_SIZE - 1; y >= 0; y--) {
+        for (int x = 0; x < MAZE_SIZE; x++) {
+            EEPROM.update(addr++, walls[x][y]);
+        }
+    }
+    
+    for (int y = MAZE_SIZE - 1; y >= 0; y--) {
+        for (int x = 0; x < MAZE_SIZE; x++) {
+            EEPROM.update(addr++, dist[x][y]);
+        }
+    }
+}
+
+void MazeSolver::loadMazeFromEEPROM()
+{
+    int addr = 0;
+    
+    currX = EEPROM.read(addr++);
+    currY = EEPROM.read(addr++);
+    currDir = (Direction)EEPROM.read(addr++);
+    
+    for (int y = MAZE_SIZE - 1; y >= 0; y--) {
+        for (int x = 0; x < MAZE_SIZE; x++) {
+            walls[x][y] = EEPROM.read(addr++);
+        }
+    }
+    
+    for (int y = MAZE_SIZE - 1; y >= 0; y--) {
+        for (int x = 0; x < MAZE_SIZE; x++) {
+            dist[x][y] = EEPROM.read(addr++);
+        }
+    }
+}
+
+void MazeSolver::displayMazeTables()
+{
+    // Serial.println("\n========================================");
+    // Serial.println("WALLS ARRAY (by coordinates)");
+    // Serial.println("========================================");
+    // Serial.print("   ");
+    // for (int x = 0; x < MAZE_SIZE; x++) {
+    //     Serial.print("  X" + String(x) + " ");
+    // }
+    // Serial.println();
+    
+    // for (int y = MAZE_SIZE - 1; y >= 0; y--) {
+    //     Serial.print("Y" + String(y) + " ");
+    //     for (int x = 0; x < MAZE_SIZE; x++) {
+    //         String wallBin = String(walls[x][y], BIN);
+    //         while (wallBin.length() < 4) wallBin = "0" + wallBin;
+    //         Serial.print(wallBin + " ");
+    //     }
+    //     Serial.println();
+    // }
+    
+    // Serial.println("\n========================================");
+    // Serial.println("DISTANCE ARRAY (by coordinates)");
+    // Serial.println("========================================");
+    // Serial.print("   ");
+    // for (int x = 0; x < MAZE_SIZE; x++) {
+    //     Serial.print("  X" + String(x) + " ");
+    // }
+    // Serial.println();
+    
+    // for (int y = MAZE_SIZE - 1; y >= 0; y--) {
+    //     Serial.print("Y" + String(y) + " ");
+    //     for (int x = 0; x < MAZE_SIZE; x++) {
+    //         String distStr = (dist[x][y] == 255) ? " -- " : String(dist[x][y]);
+    //         if (dist[x][y] < 10 && dist[x][y] != 255) distStr = "  " + distStr;
+    //         else if (dist[x][y] < 100 && dist[x][y] != 255) distStr = " " + distStr;
+    //         Serial.print(distStr + "  ");
+    //     }
+    //     Serial.println();
+    // }
+    
+    // Serial.println("\n========================================");
+    // Serial.println("       ROBOT POSITION MAP");
+    // Serial.println("========================================");
+    // Serial.println("LEGEND:");
+    // Serial.println("  ^  = Robot facing NORTH (UP)");
+    // Serial.println("  >  = Robot facing EAST (RIGHT)");
+    // Serial.println("  v  = Robot facing SOUTH (DOWN)");
+    // Serial.println("  <  = Robot facing WEST (LEFT)");
+    // Serial.println("  T  = TARGET location");
+    // Serial.println("  .  = Empty cell");
+    // Serial.println("----------------------------------------");
+    
+    // String dirName;
+    // switch(currDir) {
+    //     case NORTH: dirName = "NORTH (UP)"; break;
+    //     case EAST:  dirName = "EAST (RIGHT)"; break;
+    //     case SOUTH: dirName = "SOUTH (DOWN)"; break;
+    //     case WEST:  dirName = "WEST (LEFT)"; break;
+    // }
+    
+    // Serial.println("ROBOT at: X=" + String(currX) + ", Y=" + String(currY) + " facing " + dirName);
+    // Serial.println("TARGET at: X=" + String(TARGET_X) + ", Y=" + String(TARGET_Y));
+    // Serial.println("========================================");
+    // Serial.print("   ");
+    // for (int x = 0; x < MAZE_SIZE; x++) {
+    //     Serial.print(" X" + String(x) + " ");
+    // }
+    // Serial.println();
+    
+    // for (int y = MAZE_SIZE - 1; y >= 0; y--) {
+    //     Serial.print("Y" + String(y) + " ");
+    //     for (int x = 0; x < MAZE_SIZE; x++) {
+    //         if (x == currX && y == currY) {
+    //             String dirStr;
+    //             switch(currDir) {
+    //                 case NORTH: dirStr = " ^ "; break;
+    //                 case EAST:  dirStr = " > "; break;
+    //                 case SOUTH: dirStr = " v "; break;
+    //                 case WEST:  dirStr = " < "; break;
+    //             }
+    //             Serial.print(dirStr);
+    //         } else if (x == TARGET_X && y == TARGET_Y) {
+    //             Serial.print(" T ");
+    //         } else {
+    //             Serial.print(" . ");
+    //         }
+    //     }
+    //     Serial.println();
+    // }
+    // Serial.println("========================================");
+    // Serial.println("NOTE: Y increases upward, X increases rightward");
+    // Serial.println("========================================\n");
+}
+
+void MazeSolver::clearEEPROM()
+{
+    for (int i = 0; i < 512; i++) {
+        EEPROM.write(i, 0);
+    }
+    // Serial.println("EEPROM cleared!");
 }

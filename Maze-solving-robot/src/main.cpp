@@ -14,6 +14,9 @@
 #define ENCODER2_A 2
 #define ENCODER2_B 4
 
+#define VIEW_BUTTON 33  // Pin to trigger maze table display
+#define CLEAR_BUTTON 31  // Pin to clear EEPROM
+
 const int irPins[] = {IR1, IR2, IR3, IR4, IR5, IR6, IR7, IR8};
 const int weights[] = {-3, -2, -1, 0, 0, 1, 2, 3};
 
@@ -30,7 +33,7 @@ bool allWhiteDetected()
     for (int i = 0; i < 8; i++) {
         int a = analogRead(irPins[i]);
 
-        int strength = a - 800; // IR_THRESHOLD
+        int strength = a - 900; // IR_THRESHOLD
         if (strength < 0) strength = 0;
         if (strength > 400) strength = 400; // MAX_STRENGTH
 
@@ -38,6 +41,23 @@ bool allWhiteDetected()
     }
 
     // If all sensors detect white (low strength), return true
+    return (sumStrength == 0);
+}
+
+bool turnleft()
+{
+    long sumStrength = 0;
+
+    for (int i = 0; i < 6; i++) {
+        int a = analogRead(irPins[i]);
+
+        int strength = a - 900; // IR_THRESHOLD
+        if (strength < 0) strength = 0;
+        if (strength > 400) strength = 400; // MAX_STRENGTH
+
+        sumStrength += strength;
+    }
+
     return (sumStrength == 0);
 }
 
@@ -49,6 +69,9 @@ void setup()
     rightMotor.begin();
     mazeSolver.begin();
     lineFollower.setup();
+    
+    pinMode(VIEW_BUTTON, INPUT_PULLUP);
+    pinMode(CLEAR_BUTTON, INPUT_PULLUP);
 
     Serial.println();
     Serial.println("FLOOD FILL MAZE SOLVER");
@@ -65,9 +88,7 @@ void loop()
 
     if (currentMode == 0)
     {
-        // First maze solving mode
-        if (allWhiteDetected())
-        {
+        if (allWhiteDetected()) {
             float leftDist = mazeSolver.readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
             float rightDist = mazeSolver.readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
 
@@ -78,15 +99,14 @@ void loop()
                 modeStartTime = millis(); // Record the time when switching to line-following mode
                 leftMotor.setDirection(true);
                 rightMotor.setDirection(true);
-                leftMotor.setSpeed(80);
-                rightMotor.setSpeed(80);
+                leftMotor.setSpeed(60);
+                rightMotor.setSpeed(60);
                 delay(300);
                 leftMotor.setSpeed(0);
                 rightMotor.setSpeed(0);
             }
         }
-        else
-        {
+        else {
             mazeSolver.runStep();
         }
     }
@@ -94,31 +114,53 @@ void loop()
     {
         lineFollower.followLine();
 
-        // Line following mode
-        if (millis() - modeStartTime > 10000) // Ensure at least 10 seconds in line-following mode
+        if (millis() - modeStartTime > 10000)
         {
-            if (allWhiteDetected())
-            {
-                float leftDist = mazeSolver.readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
-                float rightDist = mazeSolver.readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
+            float leftDist = mazeSolver.readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
+            float rightDist = mazeSolver.readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
 
-                if (leftDist < 15 && rightDist < 15)
-                {
-                    Serial.println("All white detected with close walls! Switching to second maze solving mode...");
-                    currentMode = 2;
-                    leftMotor.setSpeed(80);
-                    rightMotor.setSpeed(80);
-                    delay(300);
-                    leftMotor.setSpeed(0);
-                    rightMotor.setSpeed(0);
-                    mazeSolver.begin();
-                }
+            if (allWhiteDetected() && (leftDist < 15 && rightDist < 15))
+            {
+                Serial.println("All white detected with close walls! Switching to second maze solving mode...");
+                currentMode = 2;
+                modeStartTime = millis(); // Record time when entering mode 2
+                leftMotor.setSpeed(60);
+                rightMotor.setSpeed(60);
+                delay(300);
+                leftMotor.setSpeed(0);
+                rightMotor.setSpeed(0);
+                mazeSolver.begin();
             }
         }
     }
     else if (currentMode == 2)
     {
-        // Second maze solving mode
+        if (millis() - modeStartTime > 5000)
+        {
+            if (allWhiteDetected())
+            {
+                Serial.println("Endpoint detected! All white found in mode 2. Stopping robot...");
+                leftMotor.setSpeed(0);
+                rightMotor.setSpeed(0);
+                while (true)
+                {
+                    delay(100000);
+                }
+            }
+        }
         mazeSolver.runStep();
+    }
+    
+    if (Serial.available() > 0) {
+        char cmd = Serial.read();
+        if (cmd == 'C' || cmd == 'c') {
+            Serial.println("\n!!! CLEARING EEPROM via Serial !!!");
+            mazeSolver.clearEEPROM();
+            Serial.println("EEPROM cleared! Restart robot to begin fresh.\n");
+        }
+        else if (cmd == 'V' || cmd == 'v') {
+            Serial.println("\n--- Displaying Maze Tables ---");
+            mazeSolver.displayMazeTables();
+        }
     }
 }

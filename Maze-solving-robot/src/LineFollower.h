@@ -18,21 +18,23 @@ public:
     LineFollower(int leftMotorIn1, int leftMotorIn2, int rightMotorIn1, int rightMotorIn2, const int* irPins, const int* weights, int numSensors);
     void setup();
     void followLine();
+    void followLine(int sumStrength);
 
 private:
     void runMotors(int leftPWM, int rightPWM);
     void readLineAnalog(long &weightedSum, long &sumStrength);
     bool lineDetectedAnalog();
     bool searchForLineAnalog(bool searchLeft);
+    bool isSearchingForLine = false;
 
     int leftMotorIn1, leftMotorIn2, rightMotorIn1, rightMotorIn2;
     const int* irPins;
     const int* weights;
     int numSensors;
 
-    float Kp = 35.0;
+    float Kp = 40.0; // 35 thibune
     float Kd = 0.0;
-    int baseSpeed = 80;
+    int baseSpeed = 80; // 80 thibune
 
     float prevError = 0;
     unsigned long prevTime = 0;

@@ -1,6 +1,7 @@
 #define MAZESOLVER_H
 
 #include <Arduino.h>
+#include <EEPROM.h>
 #include "MotorPID.h"
 #include "LineFollower.h" 
 
@@ -17,7 +18,8 @@
 #define TURN_SPEED      40
 #define WALL_THRESHOLD  15.0f  
 #define COUNTS_PER_90   240L
-#define COUNTS_PER_CELL 520L   
+#define COUNTS_PER_CELL 520L
+#define COUNTS_PER_CELL_SMALL 525L  
 
 // --- PD Wall Following constants ---
 const float KP = 2.2;
@@ -26,7 +28,7 @@ const float DESIRED_WALL_DISTANCE = 5.5;
 
 
 // --- Maze Constants ---
-#define MAZE_SIZE 8
+#define MAZE_SIZE 9
 #define TARGET_X  1
 #define TARGET_Y  4
 
@@ -51,12 +53,19 @@ public:
     
     // Main loop function
     void runStep(); 
+    void runStepSmallMaze();
     bool isFinished();
     bool isTargetDetectedIR();
     void reset();
     void computeShortestPath();
     void followShortestPathStep();
     float readSensor(int trig, int echo);
+    
+    // EEPROM Functions
+    void saveMazeToEEPROM();
+    void loadMazeFromEEPROM();
+    void displayMazeTables();
+    void clearEEPROM();
 
 private:
     MotorPID& leftMotor;
@@ -84,7 +93,7 @@ private:
     
     // Movement Primitives
     void turnTo(Direction targetDir);
-    void moveOneCell();
+    void moveOneCell(int countsPerCell = COUNTS_PER_CELL);
     void turnLeft();
     void turnRight();
     void turnAround();
