@@ -3,120 +3,122 @@
 #include "MazeSolver.h"
 #include "LineFollower.h"
 
-// Motor 1 (Left) pins
+// --- Hardware Definitions ---
 #define MOTOR1_IN1 8
 #define MOTOR1_IN2 9
 #define ENCODER1_A 3
 #define ENCODER1_B 7
 
-// Motor 2 (Right) pins
 #define MOTOR2_IN1 5
 #define MOTOR2_IN2 6
 #define ENCODER2_A 2
 #define ENCODER2_B 4
 
-// IR Sensor pins
-#define IR1 43
-#define IR2 44
-#define IR3 45
-#define IR4 46
-#define IR5 47
-#define IR6 48
-#define IR7 49
-#define IR8 50
-
 const int irPins[] = {IR1, IR2, IR3, IR4, IR5, IR6, IR7, IR8};
-const int numSensors = 8;
-
-// Mode control
-bool currentRunMode = false;  // false = Line Following, true = Maze Solving
+const int weights[] = {-3, -2, -1, 0, 0, 1, 2, 3};
 
 MotorPID leftMotor(MOTOR1_IN1, MOTOR1_IN2, ENCODER1_A, ENCODER1_B, true);
 MotorPID rightMotor(MOTOR2_IN1, MOTOR2_IN2, ENCODER2_A, ENCODER2_B, true);
 
 MazeSolver mazeSolver(leftMotor, rightMotor);
-LineFollower lineFollower(leftMotor, rightMotor);
+LineFollower lineFollower(MOTOR1_IN1, MOTOR1_IN2, MOTOR2_IN1, MOTOR2_IN2, irPins, weights, 8);
 
-bool allWhiteDetected() {
-    int sumVal = 0;
-    
-    for (int i = 0; i < numSensors; i++) {
-        int value = digitalRead(irPins[i]);
-        sumVal += value;
+bool allWhiteDetected()
+{
+    long sumStrength = 0;
+
+    for (int i = 0; i < 8; i++) {
+        int a = analogRead(irPins[i]);
+
+        int strength = a - 800; // IR_THRESHOLD
+        if (strength < 0) strength = 0;
+        if (strength > 400) strength = 400; // MAX_STRENGTH
+
+        sumStrength += strength;
     }
-    
-    if (sumVal == 0) {
-        mazeSolver.forwardForMs(80, 10);
-        return false;
-    } else {
-        return true;
-    }
+
+    // If all sensors detect white (low strength), return true
+    return (sumStrength == 0);
 }
 
-void setup() {
+void setup()
+{
     Serial.begin(9600);
 
     leftMotor.begin();
     rightMotor.begin();
-
     mazeSolver.begin();
-    mazeSolver.setIRPins(irPins, numSensors);  // Share IR pins with MazeSolver
-    lineFollower.begin();
+    lineFollower.setup();
 
-    Serial.println("Robot Initialized");
+    Serial.println();
+    Serial.println("FLOOD FILL MAZE SOLVER");
     Serial.println("Starting in 2 seconds...");
-    Serial.println("Mode: Line Following (will switch to Maze Solving when all white detected)");
     delay(2000);
 }
-// int linedetectfirst = 1;
-// void loop() {
-//     if (currentRunMode && !(linedetectfirst < 20)) {
-//        linedetectfirst++;
-//      ;
-//     //    delay(300);
-//         mazeSolver.forwardForMs(80, 30);
-//     //    mazeSolver.readSensors();
-//        mazeSolver.moveForwardWithWallFollowing();
-//     //    delay(20000);
 
-//      // Serial.println("Line following update complete");
-//     } else if (linedetectfirst>=20){
-//         lineFollower.update();
-//     }
-//     else {
-    
-//          // Maze solving mode - update returns true if all white detected
-//         bool allWhite = mazeSolver.update();
-//         if (allWhite) {
-//             currentRunMode = true;  // Switch to line following mode
-//             //Serial.println("Switching to Line Following Mode");
-//         }
-//     }
-// }
-bool linedetectfirst = false;
-void loop() {
-if (currentRunMode && !linedetectfirst){
-    linedetectfirst = true;
-    leftMotor.setDirection(true);
-    rightMotor.setDirection(true);
-    leftMotor.setSpeed(80);
-    rightMotor.setSpeed(80);
-    leftMotor.update();
-    rightMotor.update();
-    delay(4000);
-    leftMotor.setSpeed(0);
-    rightMotor.setSpeed(0);
-    // Serial.println("Line following update complete");
-} 
-else if (linedetectfirst){
-    lineFollower.update();
-} else {
-         // Maze solving mode - update returns true if all white detected
-        bool allWhite = mazeSolver.update();
-        if (allWhite) {
-            currentRunMode = true;  // Switch to line following mode
-            Serial.println("Switching to Line Following Mode");
+// Mode: 0 = First Maze, 1 = Line Following, 2 = Second Maze
+int currentMode = 0;
+
+void loop()
+{
+    static unsigned long modeStartTime = 0;
+
+    if (currentMode == 0)
+    {
+        // First maze solving mode
+        if (allWhiteDetected())
+        {
+            float leftDist = mazeSolver.readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
+            float rightDist = mazeSolver.readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
+
+            if (leftDist < 15 && rightDist < 15)
+            {
+                Serial.println("All white detected with close walls! Switching to line following mode...");
+                currentMode = 1;
+                modeStartTime = millis(); // Record the time when switching to line-following mode
+                leftMotor.setDirection(true);
+                rightMotor.setDirection(true);
+                leftMotor.setSpeed(80);
+                rightMotor.setSpeed(80);
+                delay(300);
+                leftMotor.setSpeed(0);
+                rightMotor.setSpeed(0);
+            }
+        }
+        else
+        {
+            mazeSolver.runStep();
         }
     }
-}
+    else if (currentMode == 1)
+    {
+        lineFollower.followLine();
 
+        // Line following mode
+        if (millis() - modeStartTime > 10000) // Ensure at least 10 seconds in line-following mode
+        {
+            if (allWhiteDetected())
+            {
+                float leftDist = mazeSolver.readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
+                float rightDist = mazeSolver.readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
+
+                if (leftDist < 15 && rightDist < 15)
+                {
+                    Serial.println("All white detected with close walls! Switching to second maze solving mode...");
+                    currentMode = 2;
+                    leftMotor.setSpeed(80);
+                    rightMotor.setSpeed(80);
+                    delay(300);
+                    leftMotor.setSpeed(0);
+                    rightMotor.setSpeed(0);
+                    mazeSolver.begin();
+                }
+            }
+        }
+    }
+    else if (currentMode == 2)
+    {
+        // Second maze solving mode
+        mazeSolver.runStep();
+    }
+}

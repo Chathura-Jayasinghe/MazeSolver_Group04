@@ -1,339 +1,586 @@
 #include "MazeSolver.h"
+#include "LineFollower.h"
 
-MazeSolver::MazeSolver(MotorPID& left, MotorPID& right)
-    : leftMotor(left), rightMotor(right), currentState(STOPPED), 
-      irPins(nullptr), irPinCount(0), lastError(0.0f), lastUpdateTime(0) {
+#define NUM_SENSORS 8
+
+MazeSolver::MazeSolver(MotorPID &left, MotorPID &right)
+    : leftMotor(left), rightMotor(right)
+{
+
+    // Initialize Robot at (0,0) facing North
+    currX = 0;
+    currY = 0;
+    currDir = NORTH;
+
+    // Initialize Map: No walls (0), Unknown distance (255)
+    for (int x = 0; x < MAZE_SIZE; x++)
+    {
+        for (int y = 0; y < MAZE_SIZE; y++)
+        {
+            walls[x][y] = 0;
+            dist[x][y] = 255;
+        }
+    }
+
+    pathLen = 0;
+    pathIndex = 0;
 }
 
-void MazeSolver::begin() {
-    pinMode(US_FRONT_ECHO, INPUT);
+void MazeSolver::begin()
+{
     pinMode(US_FRONT_TRIG, OUTPUT);
-    pinMode(US_LEFT_ECHO, INPUT);
+    pinMode(US_FRONT_ECHO, INPUT);
     pinMode(US_LEFT_TRIG, OUTPUT);
-    pinMode(US_RIGHT_ECHO, INPUT);
+    pinMode(US_LEFT_ECHO, INPUT);
     pinMode(US_RIGHT_TRIG, OUTPUT);
-    
-    currentState = MOVING_FORWARD;
-}
+    pinMode(US_RIGHT_ECHO, INPUT);
 
-void MazeSolver::setIRPins(const int* pins, int count) {
-    irPins = pins;
-    irPinCount = count;
-}
-
-float MazeSolver::ultrasonic_sensor_distance(int trigPin, int echoPin) {
-    digitalWrite(trigPin, LOW);
-    delayMicroseconds(2);
-    digitalWrite(trigPin, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(trigPin, LOW);
-
-    unsigned long duration = pulseIn(echoPin, HIGH, 10000UL); // 10ms timeout
-    if (duration == 0) {
-        return -1.0;
+    // Configure IR sensors same as line follower
+    const int irPins[NUM_SENSORS] = {IR1, IR2, IR3, IR4, IR5, IR6, IR7, IR8};
+    for (int i = 0; i < NUM_SENSORS; i++)
+    {
+        pinMode(irPins[i], INPUT);
     }
-    float distance_cm = duration * 0.0343 / 2.0;
-    return distance_cm;
+
+    stopMotors();
 }
 
-void MazeSolver::readSensors() {
-    ranges.front_cm = ultrasonic_sensor_distance(US_FRONT_TRIG, US_FRONT_ECHO);
-    delay(10);
-    ranges.left_cm = ultrasonic_sensor_distance(US_LEFT_TRIG, US_LEFT_ECHO);
-    delay(10);
-    ranges.right_cm = ultrasonic_sensor_distance(US_RIGHT_TRIG, US_RIGHT_ECHO);
-    delay(10);
-}
+void MazeSolver::runStep()
+{
+    // 1. Read Sensors & Update Walls
+    updateWalls();
 
-bool MazeSolver::allWhiteDetected() {
-    if (irPins == nullptr || irPinCount == 0) {
-        return false;  // IR pins not set, can't detect
-    }
-    
-    int sumVal = 0;
-    
-    for (int i = 0; i < irPinCount; i++) {
-        int value = digitalRead(irPins[i]);
-        sumVal += value;
-    }
-    
-    // If all sensors read LOW (0), all white detected
-    return (sumVal == 0);
-}
+    // 2. Check if we reached target
+    // if (currX == TARGET_X && currY == TARGET_Y)
+    // {
+    //     stopMotors();
+    //     return; // DONE!
+    // }
 
-bool MazeSolver::sideIsOpen(float d) { 
-    return d >= SIDE_OPEN_CM && d > 0; 
-}
+    // 3. Recalculate Distances (Flood Fill)
+    // floodFill();
 
-long MazeSolver::encLeft() { 
-    return leftMotor.getEncoderCount(); 
-}
+    // 4. Decide Best Move
+    Direction nextDir = getBestDirection();
 
-long MazeSolver::encRight() { 
-    return rightMotor.getEncoderCount(); 
-}
+    Serial.println("====================================================================================");
+    Serial.println("Current Position (" + String(currX) + "," + String(currY) + ")");
+    Serial.println("current robot Direction - before turn: " + String(currDir));
+    Serial.println("current cell wall " + String(walls[currX][currY], BIN));
 
-void MazeSolver::encZeroBoth() {
-    leftMotor.resetEncoder();   
-    rightMotor.resetEncoder();  
-}
+    // 5. Execute Move
+    turnTo(nextDir);
+    moveOneCell();
+    delay(1000);
 
-void MazeSolver::calculateWallFollowingSpeeds(int &leftSpeed, int &rightSpeed) {
-    unsigned long now = millis();
-    float dt = (now - lastUpdateTime) / 1000.0f;
+    Serial.println("Before Turn Next Direction: " + String(nextDir));
+    Serial.println("Move one cell");
 
-    if (dt <= 0) dt = 0.01f;
-    lastUpdateTime = now;
+    // 6. Update Virtual Coordinates
+    if (currDir == NORTH)
+        currY++;
+    else if (currDir == EAST)
+        currX++;
+    else if (currDir == SOUTH)
+        currY--;
+    else if (currDir == WEST)
+        currX--;
 
-    float error = ranges.left_cm - ranges.right_cm;
+    Serial.println("Next Position after move i cell: (" + String(currX) + "," + String(currY) + ")");
+    Serial.println("====================================================================================");
+    Serial.println();
 
-    if (fabsf(error) < ALIGNMENT_THRESHOLD) error = 0.0f;
-
-    float derivative = (error - lastError) / dt;
-    lastError = error;
-
-    float correction = (Kp * 1.5 * error) + (Kd * derivative);
-    correction = constrain(correction, -MAX_CORRECTION, MAX_CORRECTION);
-
-    leftSpeed  = constrain(BASE_SPEED - correction, 0, 255);
-    rightSpeed = constrain(BASE_SPEED + correction, 0, 255);
-}
-
-void MazeSolver::moveForwardWithWallFollowing() {
-    int leftSpeed, rightSpeed;
-    calculateWallFollowingSpeeds(leftSpeed, rightSpeed);
-    
-    leftMotor.setDirection(true);
-    rightMotor.setDirection(true);
-    leftMotor.setSpeed(leftSpeed);
-    rightMotor.setSpeed(rightSpeed);
-}
-
-void MazeSolver::moveForward() {
-    leftMotor.setDirection(true);
-    rightMotor.setDirection(true);
-    leftMotor.setSpeed(BASE_SPEED);
-    rightMotor.setSpeed(BASE_SPEED);
-}
-
-void MazeSolver::stopMotors() {
-    leftMotor.setSpeed(0);
-    rightMotor.setSpeed(0);
-}
-
-void MazeSolver::brakeShort() {
     stopMotors();
     delay(500);
 }
 
-void MazeSolver::forwardForMs(int pwmBase, long targetPulses) {
+bool MazeSolver::isFinished()
+{
+    // Finish if coordinates reach target or IR sees white target
+    if (currX == TARGET_X && currY == TARGET_Y)
+    {
+        return true;
+    }
+    return isTargetDetectedIR();
+}
+
+bool MazeSolver::isTargetDetectedIR()
+{
+    // Treat HIGH on any IR sensor as white target detected
+    const int irPins[NUM_SENSORS] = {IR1, IR2, IR3, IR4, IR5, IR6, IR7, IR8};
+    for (int i = 0; i < NUM_SENSORS; i++)
+    {
+        if (digitalRead(irPins[i]) == HIGH)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// --- Flood Fill Implementation ---
+void MazeSolver::floodFill()
+{
+    // Reset distances
+    for (int x = 0; x < MAZE_SIZE; x++)
+    {
+        for (int y = 0; y < MAZE_SIZE; y++)
+        {
+            dist[x][y] = 255;
+        }
+    }
+
+    // Queue for BFS (Circular buffer)
+    struct Point
+    {
+        int x, y;
+    };
+    Point queue[MAZE_SIZE * MAZE_SIZE];
+    int head = 0, tail = 0;
+
+    // Start at Target
+    dist[TARGET_X][TARGET_Y] = 0;
+    queue[tail++] = {TARGET_X, TARGET_Y};
+
+    while (head != tail)
+    {
+        Point p = queue[head++];
+        int d = dist[p.x][p.y];
+
+        // Check North Neighbor (x, y+1)
+        if (p.y < MAZE_SIZE - 1 && !(walls[p.x][p.y] & WALL_NORTH))
+        {
+            if (dist[p.x][p.y + 1] == 255)
+            {
+                dist[p.x][p.y + 1] = d + 1;
+                queue[tail++] = {p.x, p.y + 1};
+            }
+        }
+        // Check East Neighbor (x+1, y)
+        if (p.x < MAZE_SIZE - 1 && !(walls[p.x][p.y] & WALL_EAST))
+        {
+            if (dist[p.x + 1][p.y] == 255)
+            {
+                dist[p.x + 1][p.y] = d + 1;
+                queue[tail++] = {p.x + 1, p.y};
+            }
+        }
+        // Check South Neighbor (x, y-1)
+        if (p.y > 0 && !(walls[p.x][p.y] & WALL_SOUTH))
+        {
+            if (dist[p.x][p.y - 1] == 255)
+            {
+                dist[p.x][p.y - 1] = d + 1;
+                queue[tail++] = {p.x, p.y - 1};
+            }
+        }
+        // Check West Neighbor (x-1, y)
+        if (p.x > 0 && !(walls[p.x][p.y] & WALL_WEST))
+        {
+            if (dist[p.x - 1][p.y] == 255)
+            {
+                dist[p.x - 1][p.y] = d + 1;
+                queue[tail++] = {p.x - 1, p.y};
+            }
+        }
+    }
+}
+
+// --- Mapping & Sensors ---
+void MazeSolver::updateWalls()
+{
+    float f = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
+    float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
+    float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
+    Serial.println("Sensor Readings - Front: " + String(f) + " cm, Left: " + String(l) + " cm, Right: " + String(r) + " cm");
+
+    bool wallFront = (f > 0 && f < 10);
+    bool wallLeft = (l > 0 && l < 10);
+    bool wallRight = (r > 0 && r < 8);
+
+    Serial.println("#################################################################################");
+    Serial.println();
+
+    Serial.print("frontwall -  " + String(wallFront));
+    Serial.print("/ leftwall -  " + String(wallLeft));
+    Serial.println("/ rightwall -  " + String(wallRight));
+    Serial1.println();
+
+    // Map Relative (Front/Left/Right) to Absolute (N/E/S/W)
+    if (wallFront)
+    {
+        if (currDir == NORTH)
+            walls[currX][currY] |= WALL_NORTH;
+        if (currDir == EAST)
+            walls[currX][currY] |= WALL_EAST;
+        if (currDir == SOUTH)
+            walls[currX][currY] |= WALL_SOUTH;
+        if (currDir == WEST)
+            walls[currX][currY] |= WALL_WEST;
+    }
+    if (wallRight)
+    {
+        if (currDir == NORTH)
+            walls[currX][currY] |= WALL_EAST;
+        if (currDir == EAST)
+            walls[currX][currY] |= WALL_SOUTH;
+        if (currDir == SOUTH)
+            walls[currX][currY] |= WALL_WEST;
+        if (currDir == WEST)
+            walls[currX][currY] |= WALL_NORTH;
+    }
+    if (wallLeft)
+    {
+        if (currDir == NORTH)
+            walls[currX][currY] |= WALL_WEST;
+        if (currDir == EAST)
+            walls[currX][currY] |= WALL_NORTH;
+        if (currDir == SOUTH)
+            walls[currX][currY] |= WALL_EAST;
+        if (currDir == WEST)
+            walls[currX][currY] |= WALL_SOUTH;
+    }
+
+    // Sync neighbors (If I have North wall, neighbor above has South wall)
+    if ((walls[currX][currY] & WALL_NORTH) && currY < MAZE_SIZE - 1)
+        walls[currX][currY + 1] |= WALL_SOUTH;
+    if ((walls[currX][currY] & WALL_EAST) && currX < MAZE_SIZE - 1)
+        walls[currX + 1][currY] |= WALL_WEST;
+    if ((walls[currX][currY] & WALL_SOUTH) && currY > 0)
+        walls[currX][currY - 1] |= WALL_NORTH;
+    if ((walls[currX][currY] & WALL_WEST) && currX > 0)
+        walls[currX - 1][currY] |= WALL_EAST;
+
+    Serial.println("Full maze:");
+    for (int x = 0; x < MAZE_SIZE; x++) {
+        String row = "";
+        for (int y = 0; y < MAZE_SIZE; y++) {
+            row += String(walls[x][y], BIN) + " ";
+        }
+        Serial.println("row: " + row);
+    }
+}
+
+Direction MazeSolver::getBestDirection()
+{
+    Direction bestDir = currDir;
+
+    float f = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
+    float l = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
+    float r = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
+
+    const float MIN_FORWARD_DISTANCE = 15.0;
+
+    bool wallFront = (f > -2 && f < MIN_FORWARD_DISTANCE);
+    bool wallLeft = (l > 0 && l < 12);
+    bool wallRight = (r > 0 && r < 12);
+
+    int wallConfig = (wallFront << 2) | (wallLeft << 1) | wallRight;
+
+    switch (wallConfig) {
+        
+        case 0b110:  
+        bestDir = (Direction)((currDir + 1) % 4);
+        Serial.println("Decision: FORCED RIGHT (front & left blocked)");
+        break;
+        
+        case 0b101: 
+        bestDir = (Direction)((currDir + 3) % 4);
+        Serial.println("Decision: FORCED LEFT (front & right blocked)");
+        break;
+        
+        case 0b011:  
+        bestDir = currDir;
+        Serial.println("Decision: CORRIDOR → Straight");
+        break;
+        
+        case 0b001:  
+        bestDir = (Direction)((currDir + 3) % 4);  
+        Serial.println("Decision: L-T-JUNCTION () → turn left");
+        break;
+        
+        case 0b010: 
+        bestDir = (Direction)((currDir + 1) % 4);
+        Serial.println("Decision: L-JUNCTION () → right ");
+        break;
+        
+        case 0b111: 
+            bestDir = (Direction)((currDir + 2) % 4);
+            Serial.println("Decision: DEAD END → U-Turn");
+            break;
+            
+        case 0b000:  
+            bestDir = (Direction)((currDir + 3) % 4); 
+            Serial.println("Decision: CROSSROADS → Left (left-hand rule)");
+            break;
+
+        case 0b100: 
+            bestDir = (Direction)((currDir + 3) % 4); 
+            Serial.println("Decision: T-JUNCTION → Left (left-hand rule)");
+            break;
+    }
+    return bestDir;
+}
+
+Direction MazeSolver::getBestDirectionAt(int x, int y)
+{
+    int minDist = 255;
+    Direction bestDir = NORTH;
+
+    if (y < MAZE_SIZE - 1 && !(walls[x][y] & WALL_NORTH))
+    {
+        if (dist[x][y + 1] < minDist)
+        {
+            minDist = dist[x][y + 1];
+            bestDir = NORTH;
+        }
+    }
+    if (x < MAZE_SIZE - 1 && !(walls[x][y] & WALL_EAST))
+    {
+        if (dist[x + 1][y] < minDist)
+        {
+            minDist = dist[x + 1][y];
+            bestDir = EAST;
+        }
+    }
+    if (y > 0 && !(walls[x][y] & WALL_SOUTH))
+    {
+        if (dist[x][y - 1] < minDist)
+        {
+            minDist = dist[x][y - 1];
+            bestDir = SOUTH;
+        }
+    }
+    if (x > 0 && !(walls[x][y] & WALL_WEST))
+    {
+        if (dist[x - 1][y] < minDist)
+        {
+            minDist = dist[x - 1][y];
+            bestDir = WEST;
+        }
+    }
+    return bestDir;
+}
+
+void MazeSolver::computeShortestPath()
+{
+    // Recompute flood fill distances first
+    floodFill();
+
+    // Build path from start (0,0) to target using decreasing dist
+    int x = 0, y = 0;
+    Direction d;
+    pathLen = 0;
+    pathIndex = 0;
+
+    // Guard: if start unreachable, keep empty path
+    if (dist[x][y] == 255)
+        return;
+
+    // Limit steps to grid size to avoid infinite loops
+    for (int steps = 0; steps < MAZE_SIZE * MAZE_SIZE; steps++)
+    {
+        if (x == TARGET_X && y == TARGET_Y)
+            break;
+        d = getBestDirectionAt(x, y);
+        path[pathLen++] = d;
+        // advance virtual position
+        if (d == NORTH)
+            y++;
+        else if (d == EAST)
+            x++;
+        else if (d == SOUTH)
+            y--;
+        else if (d == WEST)
+            x--;
+    }
+}
+
+void MazeSolver::followShortestPathStep()
+{
+    if (pathIndex >= pathLen)
+    {
+        stopMotors();
+        return;
+    }
+    Direction nextDir = path[pathIndex];
+    turnTo(nextDir);
+    moveOneCell();
+    if (currDir == NORTH)
+        currY++;
+    else if (currDir == EAST)
+        currX++;
+    else if (currDir == SOUTH)
+        currY--;
+    else if (currDir == WEST)
+        currX--;
+    stopMotors();
+    pathIndex++;
+}
+
+void MazeSolver::reset()
+{
+    // Reset robot pose and map
+    currX = 0;
+    currY = 0;
+    currDir = NORTH;
+    for (int x = 0; x < MAZE_SIZE; x++)
+    {
+        for (int y = 0; y < MAZE_SIZE; y++)
+        {
+            walls[x][y] = 0;
+            dist[x][y] = 255;
+        }
+    }
+    pathLen = 0;
+    pathIndex = 0;
+    stopMotors();
+}
+
+void MazeSolver::turnTo(Direction targetDir)
+{
+    int diff = (targetDir - currDir);
+
+    if (diff == 0)
+    {
+        // Straight - Do nothing
+    }
+    else if (diff == 1 || diff == -3)
+    {
+        turnRight();
+    }
+    else if (diff == -1 || diff == 3)
+    {
+        turnLeft();
+    }
+    else
+    {
+        turnAround();
+    }
+
+    currDir = targetDir;
+}
+
+void MazeSolver::moveOneCell()
+{
+    encZero();
     leftMotor.setDirection(true);
     rightMotor.setDirection(true);
 
-    encZeroBoth();
+    float error = 0;
+    float lastError = 0;
+    float correction = 0;
 
-    // Start with base speed; adjust inside loop using single-wall following
-    leftMotor.setSpeed(pwmBase);
-    rightMotor.setSpeed(pwmBase);
-
-    while (true) {
-        long cL = labs(encLeft());
-        long cR = labs(encRight());
-        long avg = (cL + cR) >> 1;
-
-        if (avg >= targetPulses) break;  
-
-        // Single-wall following: follow the side that is NOT open
-        // readSensors();
-        // const bool leftOpen  = sideIsOpen(ranges.left_cm);
-        // const bool rightOpen = sideIsOpen(ranges.right_cm);
-
-        // int lPWM = pwmBase;
-        // int rPWM = pwmBase;
-
-        // if (leftOpen ^ rightOpen) {
-        //     Serial.println("Single-wall following active");
-        //     const bool wallOnLeft = !leftOpen;  // single wall is the side that's not open
-        //     const float wallDist  = wallOnLeft ? ranges.left_cm : ranges.right_cm;
-        //     const float error     = TARGET_DIST_CM - wallDist; // +ve if too close
-        //     float corr            = constrain(10 * error, -MAX_CORRECTION, MAX_CORRECTION);
-        //     Serial.print("Correction: ");
-        //     Serial.println(corr);
-
-        //     if (wallOnLeft) {
-        //         lPWM = constrain(pwmBase - (int)corr, 0, 255);
-        //         rPWM = constrain(pwmBase + (int)corr, 0, 255);
-        //     } else {
-        //         lPWM = constrain(pwmBase + (int)corr, 0, 255);
-        //         rPWM = constrain(pwmBase - (int)corr, 0, 255);
-        //     }
-        // }
-
-        // leftMotor.setSpeed(lPWM);
-        // rightMotor.setSpeed(rPWM);
-        if (ultrasonic_sensor_distance(US_FRONT_TRIG, US_FRONT_ECHO) < 3 ) {
-            // Serial.println("Obstacle detected! Stopping.");
-            break;
-        }
-        delayMicroseconds(700);
-    }
-    stopMotors();
-    encZeroBoth();  
-}
-
-void MazeSolver::correctionRotate(){
-    if (ranges.left_cm<3 && ranges.right_cm>10){
-        leftMotor.setDirection(true);
-        rightMotor.setDirection(false);
-        leftMotor.setSpeed(50);
-        rightMotor.setSpeed(50);
-        delay(100);
-        stopMotors();
-    }
-    if(ranges.right_cm<3 && ranges.left_cm>10){
-        leftMotor.setDirection(false);
-        rightMotor.setDirection(true);
-        leftMotor.setSpeed(50);
-        rightMotor.setSpeed(50);
-        delay(100);
-        stopMotors();
-    }
-}
-
-void MazeSolver::Turn90(int dir) {
-    const long target = COUNTS_PER_90; 
-    const bool turnCW  = (dir > 0);
-    const bool turnCCW = (dir < 0);
-
-    leftMotor.setDirection(turnCCW); 
-    rightMotor.setDirection(turnCW); 
-
-    encZeroBoth();
-
-    leftMotor.setSpeed(TURN_SPEED);
-    rightMotor.setSpeed(TURN_SPEED);
-
-    while (true) {
-        long cL = labs(encLeft());
-        long cR = labs(encRight());
-
-        long avg = (cL + cR) >> 1;
-        if (avg >= target) break;  
-
-        delayMicroseconds(800);
-    }
-
-    stopMotors();
-    encZeroBoth(); 
-}
-
-void MazeSolver::rotateLeft90() { 
-    Turn90(+1); 
-}
-
-void MazeSolver::rotateRight90() { 
-    Turn90(-1); 
-}
-
-void MazeSolver::reverseMotors(int duration_ms) {
-    leftMotor.setDirection(false);
-    rightMotor.setDirection(false);
     leftMotor.setSpeed(BASE_SPEED);
     rightMotor.setSpeed(BASE_SPEED);
-    delay(duration_ms);
+
+    while (true)
+    {
+        long avg = (labs(encLeft()) + labs(encRight())) / 2;
+        if (avg >= COUNTS_PER_CELL)
+            break;
+
+        float rightDist = readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
+        float leftDist = readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
+
+        bool rightWallExists = (rightDist > 0 && rightDist < WALL_THRESHOLD * 1.2);
+        bool leftWallExists = (leftDist > 0 && leftDist < WALL_THRESHOLD * 1.2);
+
+        if (rightWallExists && leftWallExists)
+        {
+            error = leftDist - rightDist + 1;
+        }
+        else if (rightWallExists)
+        {
+            error = DESIRED_WALL_DISTANCE - rightDist;
+        }
+        else if (leftWallExists)
+        {
+            error = leftDist - DESIRED_WALL_DISTANCE + 1;
+        }
+        else
+        {
+            error = 0;
+        }
+
+        correction = KP * error + KD * (error - lastError);
+        lastError = error;
+
+        int leftSpeed = BASE_SPEED - correction;
+        int rightSpeed = BASE_SPEED + correction;
+
+        leftSpeed = constrain(leftSpeed, 0, 200);
+        rightSpeed = constrain(rightSpeed, 0, 200);
+
+        leftMotor.setSpeed(leftSpeed);
+        rightMotor.setSpeed(rightSpeed);
+
+        // Safety: If too close to front wall, stop early
+        // float frontDist = readSensor(US_FRONT_TRIG, US_FRONT_ECHO);
+        // if (frontDist > 0 && frontDist < 3.0) {
+        //     Serial.println("**************breaking...");
+        //     break;
+        // }
+
+        delay(10);
+    }
     stopMotors();
 }
 
-void MazeSolver::rotateUTurn() {
-    if (ranges.right_cm > ranges.left_cm) {
-        rotateRight90();
-        delay(100);
-        // reverseMotors(200);
-        rotateRight90();
-        return;
-    } else {
-        rotateLeft90();
-        delay(100);
-        // reverseMotors(200);
-        rotateLeft90();
-        return;
-    }
+void MazeSolver::turnLeft()
+{
+    encZero();
+    leftMotor.setDirection(false);
+    rightMotor.setDirection(true);
+    leftMotor.setSpeed(TURN_SPEED);
+    rightMotor.setSpeed(TURN_SPEED);
+    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_90)
+        ;
+    stopMotors();
 }
 
-JunctionType MazeSolver::classifyJunction(const RangeReadings& r) {
-    const bool frontBlocked = (r.front_cm > 0 && r.front_cm < 6);
-    const bool leftOpen     = sideIsOpen(r.left_cm);
-    const bool rightOpen    = sideIsOpen(r.right_cm);
-
-    if (leftOpen && !rightOpen)  return JT_L_LEFT;
-    else if (!leftOpen && rightOpen)  return JT_L_RIGHT;
-    else if (leftOpen && rightOpen)   return frontBlocked ? JT_T : JT_CROSS_OR_CORNER;
-    else                             return frontBlocked ? JT_DEAD_END : JT_STRAIGHT;
+void MazeSolver::turnRight()
+{
+    encZero();
+    leftMotor.setDirection(true);
+    rightMotor.setDirection(false);
+    leftMotor.setSpeed(TURN_SPEED);
+    rightMotor.setSpeed(TURN_SPEED);
+    while ((labs(encLeft()) + labs(encRight())) / 2 < COUNTS_PER_90)
+        ;
+    stopMotors();
 }
 
-Decision MazeSolver::decideAction(JunctionType jt) {
-    switch (jt) {
-        case JT_T:                return DEC_LEFT;
-        case JT_L_LEFT:           return DEC_LEFT;
-        case JT_CROSS_OR_CORNER:  return DEC_LEFT;
-        case JT_STRAIGHT:         return DEC_STRAIGHT;
-        case JT_L_RIGHT:          return DEC_RIGHT;
-        case JT_DEAD_END:         return DEC_UTURN;
-        default:                  return DEC_NONE;
-    }
+void MazeSolver::turnAround()
+{
+    turnRight();
+    delay(200);
+    turnRight();
 }
 
-void MazeSolver::executeDecision(Decision d) {
-    switch (d) {
-        case DEC_LEFT:      forwardForMs(BASE_SPEED, 330); rotateLeft90();  forwardForMs(BASE_SPEED, 200); break;
-        case DEC_STRAIGHT:  break;
-        case DEC_RIGHT:     forwardForMs(BASE_SPEED, 330); rotateRight90();  forwardForMs(BASE_SPEED, 200); break;
-        case DEC_UTURN:     rotateUTurn();     break;
-        default:            break;
-    }
+void MazeSolver::stopMotors()
+{
+    leftMotor.setSpeed(0);
+    rightMotor.setSpeed(0);
 }
 
-bool MazeSolver::update() {
-    readSensors();
+float MazeSolver::readSensor(int trig, int echo)
+{
+    digitalWrite(trig, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trig, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trig, LOW);
+    long duration = pulseIn(echo, HIGH, 10000);
+    if (duration == 0)
+        return -1;
+    return duration * 0.034 / 2;
+}
 
-    Serial.print("Front: ");
-    Serial.print(ranges.front_cm);
-    Serial.print(" cm, Left: ");
-    Serial.print(ranges.left_cm);
-    Serial.print(" cm, Right: ");
-    Serial.print(ranges.right_cm);
-    Serial.println(" cm");
-
-    switch (currentState) {
-        case MOVING_FORWARD: {
-            JunctionType jt = classifyJunction(ranges);
-            Serial.println(jt);
-
-            const bool mustDecide =
-            (jt == JT_T) || (jt == JT_L_LEFT) || (jt == JT_L_RIGHT) ||
-            (jt == JT_DEAD_END) || (ranges.front_cm > 0 && ranges.front_cm < FRONT_STOP_CM);
-
-            if (mustDecide) {
-                stopMotors();
-
-                Decision d = decideAction(jt);
-                Serial.println(d);
-
-                executeDecision(d);
-                currentState = MOVING_FORWARD;
-                break;
-            }
-            moveForwardWithWallFollowing();
-            break;
-        }
-        case STOPPED:
-            stopMotors();
-            break;
-    }
-
-    leftMotor.update();
-    rightMotor.update();
-    
-    // Check if all IR sensors detect white and return the result
-    return allWhiteDetected();
+long MazeSolver::encLeft() { return leftMotor.getEncoderCount(); }
+long MazeSolver::encRight() { return rightMotor.getEncoderCount(); }
+void MazeSolver::encZero()
+{
+    leftMotor.resetEncoder();
+    rightMotor.resetEncoder();
 }
