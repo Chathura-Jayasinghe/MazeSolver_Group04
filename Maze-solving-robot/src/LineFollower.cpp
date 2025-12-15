@@ -90,3 +90,31 @@ void LineFollower::followLine() {
     prevError = error;
     prevTime  = now;
 }
+
+void LineFollower::followLine(int sumStrength) {
+
+    if (sumStrength > 25) {   // LINE_DETECT_SUM_MIN
+
+        if (!isSearchingForLine) {
+            isSearchingForLine = true;
+
+            if (searchForLineAnalog(true)) {
+                isSearchingForLine = false;
+                Serial.println("Found line on LEFT!");
+                return;
+                
+            }
+
+            if (searchForLineAnalog(false)) {
+                isSearchingForLine = true;
+                return;
+            }
+
+            runMotors(0, 0);
+            return;
+        }
+        return;
+    }
+
+    isSearchingForLine = false;
+}
