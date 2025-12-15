@@ -46,7 +46,7 @@ bool LineFollower::lineDetectedAnalog() {
 }
 
 bool LineFollower::searchForLineAnalog(bool searchLeft) {
-    unsigned long searchStart = millis();
+        unsigned long searchStart = millis();
 
     while (millis() - searchStart < 1000) { // SEARCH_DURATION_MS
         if (searchLeft) runMotors(0, 90); // TURN_SPEED_LINE
@@ -59,7 +59,65 @@ bool LineFollower::searchForLineAnalog(bool searchLeft) {
         }
     }
     return false;
+    
+    
+    
 }
+
+void LineFollower::followLine(int sumStrength) {
+
+    // 🚨 LINE LOST
+    if (sumStrength > 25) {   // LINE_DETECT_SUM_MIN
+
+        // Run search ONLY ONCE
+        if (!isSearchingForLine) {
+            isSearchingForLine = true;
+
+            // Try turning left first
+            if (searchForLineAnalog(true)) {
+                isSearchingForLine = false;
+                Serial.println("Found line on LEFT!");
+                return;
+                
+            }
+
+            // Then try turning right
+            if (searchForLineAnalog(false)) {
+                isSearchingForLine = true;
+                return;
+            }
+
+            // Line not found → stop
+            runMotors(0, 0);
+            return;
+        }
+
+        // Already searched → do nothing
+        return;
+    }
+
+    // ✅ LINE FOUND AGAIN
+    isSearchingForLine = false;
+
+    // 👉 Normal line-following motor logic here
+    // runMotors(leftSpeed, rightSpeed);
+}
+
+
+int irPins[8] = {A0, A1, A2, A3, A4, A5, A6, A7};
+
+// bool detectSixIR() {
+//     int count = 0;
+
+//     for (int i = 0; i < 8; i++) {
+//         int value = analogRead(irPins[i]);   // use digitalRead if digital
+//         if (value < 400) {                   // adjust threshold
+//             count++;
+//         }
+//     }
+
+//     return (count >= 5);
+// }
 
 void LineFollower::followLine() {
     long weightedSum = 0;
@@ -70,9 +128,16 @@ void LineFollower::followLine() {
     if (sumStrength < 25) { // LINE_DETECT_SUM_MIN
         if (searchForLineAnalog(true)) return;
         if (searchForLineAnalog(false)) return;
+        
         runMotors(0, 0);
         return;
     }
+
+    // if (detectSixIR()) {
+    //     // Turn left
+    //     runMotors(60, 120);   // left motor slower, right motor faster
+    //     delay(100);           // adjust turn duration
+    // }
 
     float error = (float)weightedSum / (float)sumStrength;
 
