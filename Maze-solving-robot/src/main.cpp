@@ -114,13 +114,16 @@ void loop()
     {
         lineFollower.followLine();
 
-        if (millis() - modeStartTime > 10000)
+        if (millis() - modeStartTime > 21000)
         {
             float leftDist = mazeSolver.readSensor(US_LEFT_TRIG, US_LEFT_ECHO);
             float rightDist = mazeSolver.readSensor(US_RIGHT_TRIG, US_RIGHT_ECHO);
 
-            if (allWhiteDetected() && (leftDist < 15 && rightDist < 15))
+            if (leftDist < 15 && rightDist < 15)
             {
+                leftMotor.setSpeed(0);
+                rightMotor.setSpeed(0);
+                delay(1000); 
                 Serial.println("All white detected with close walls! Switching to second maze solving mode...");
                 currentMode = 2;
                 modeStartTime = millis(); // Record time when entering mode 2
