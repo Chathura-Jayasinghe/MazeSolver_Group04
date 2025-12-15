@@ -48,7 +48,7 @@ void MazeSolver::begin()
 void MazeSolver::runStep()
 {
     // 1. Read Sensors & Update Walls
-    // updateWalls();
+    updateWalls();
 
     // 2. Check if we reached target
     // if (currX == TARGET_X && currY == TARGET_Y)
@@ -198,8 +198,8 @@ void MazeSolver::updateWalls()
     bool wallLeft = (l > 0 && l < 10);
     bool wallRight = (r > 0 && r < 8);
 
-    Serial1.println("#################################################################################");
-    Serial1.println();
+    Serial.println("#################################################################################");
+    Serial.println();
 
     Serial.print("frontwall -  " + String(wallFront));
     Serial.print("/ leftwall -  " + String(wallLeft));
